@@ -1,0 +1,3 @@
+# BY Tech / SinoWealth gaming keyboard 258a:010c — allow seated user RGB control
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", TAG+="uaccess"
+KERNEL=="hidraw*", SUBSYSTEMS=="usb", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", TAG+="uaccess"

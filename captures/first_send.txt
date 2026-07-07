@@ -1,0 +1,9 @@
+sniffing /dev/usbmon1, filtering devnum=7 (Ctrl-C to stop)
+Traceback (most recent call last):
+  File "/home/cryo/kbd-re/usbmon_sniff.py", line 72, in <module>
+    main()
+    ~~~~^^
+  File "/home/cryo/kbd-re/usbmon_sniff.py", line 45, in main
+    start_frame, xfer_flags, ndesc) = HDR.unpack(raw[:64])
+                                      ~~~~~~~~~~^^^^^^^^^^
+struct.error: unpack requires a buffer of 60 bytes
