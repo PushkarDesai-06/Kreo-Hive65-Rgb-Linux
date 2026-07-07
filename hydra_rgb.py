@@ -12,10 +12,14 @@ Usage:
   hydra_rgb.py color <rrggbb>              # whole board one color
   hydra_rgb.py key <keyname> <rrggbb> ...  # per-key colors (pairs), rest off
   hydra_rgb.py gradient <rrggbb> <rrggbb>  # left-to-right gradient
-  hydra_rgb.py rainbow                     # static rainbow across columns
-  hydra_rgb.py wave [seconds]              # animated hue wave (host-driven)
+  hydra_rgb.py rainbow                     # rainbow across columns
+  hydra_rgb.py wave [seconds]              # animated hue wave (forever if no time)
   hydra_rgb.py off                         # all LEDs off
   hydra_rgb.py raw <hex...>                # send raw feature report
+
+  color/key/gradient/rainbow/wave stay on until Ctrl-C: the board reverts to
+  its onboard lighting once streaming stops, so the tool holds the frame by
+  re-sending it. Add --once to set a single frame and exit (for scripts).
   hydra_rgb.py audio [options]             # audio-reactive spectrum wave
       --mode colorful|single   coloring (default colorful rainbow)
       --color RRGGBB           color for single mode (default 009bde)
@@ -23,7 +27,13 @@ Usage:
       --smooth FLOAT           smoothness multiplier (default 1.0)
       --scroll FLOAT           colorful gradient scroll speed in hue
                                cycles/sec, left-to-right; 0 = static (0.15)
-      --shape wave|bars        center-out wave or bottom-up bars (default wave)
+      --effect NAME            wave  = center-out spectrum (default)
+                               bars  = bottom-up equalizer
+                               vortex= black hole: dark center, rainbow ring
+                                       spinning around it (faster when loud)
+                               ripple= rings pushed outward by bass
+                               (--shape is a backward-compatible alias)
+      --radius FLOAT           vortex event-horizon (hole) size 0..1 (0.18)
       --fps N --source NAME --duration SEC --debug
     Captures system sound from the default sink's monitor via parec
     (PipeWire/PulseAudio); override with --source (see: pactl list short
@@ -132,14 +142,48 @@ LAYOUT = [
 SLOT = {name: col * 6 + row + 1 for name, col, row in LAYOUT}
 MAXCOL = 15
 
+# Per-key geometry for 2D (field) effects: normalized position, radius and
+# angle from the board's center. Columns/rows are each scaled to roughly
+# [-1, 1] so a "circle" fills the wide 16x5 grid. Precomputed once.
+TAU = 2.0 * math.pi
+_CX, _CY = MAXCOL / 2.0, (ROWS - 1) / 2.0  # center at col 7.5, row 2
+_XN, _YN = MAXCOL / 2.0 + 0.5, (ROWS - 1) / 2.0 + 0.5
+GEOM = {
+    name: (
+        (col - _CX) / _XN,
+        (row - _CY) / _YN,
+        math.hypot((col - _CX) / _XN, (row - _CY) / _YN),
+        math.atan2((row - _CY) / _YN, (col - _CX) / _XN),
+    )
+    for name, col, row in LAYOUT
+}
+# vortex: a black hole. A dark event horizon sits in the middle, ringed by a
+# bright accretion disk whose rainbow gradient rotates around it (faster when
+# louder). Bass swells the horizon and shoves the ring outward; each frequency
+# band lights up its own sector of the ring.
+VORTEX_BASE = 0.10   # idle color-rotation, revolutions/sec
+VORTEX_SPIN = 1.2    # extra rev/sec at full energy
+HOLE_SWELL = 0.18    # how much bass grows the event-horizon radius
+RING_GAP = 0.28      # accretion ring sits this far outside the hole
+RING_PUSH = 0.22     # bass shoves the ring further out (beat ripple)
+RING_W = 0.16        # accretion-ring thickness (gaussian sigma)
+# ripple: concentric rings pushed outward by bass hits
+RIPPLE_RINGS = 2.5
+RIPPLE_BASE = 0.15   # idle ring cycles/sec
+RIPPLE_SPEED = 1.2   # extra cycles/sec driven by bass
+
 
 def find_device():
     for path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
-        uevent = open(path + "/device/uevent").read().upper()
-        if "V0000258AP0000010C" not in uevent:
+        try:
+            uevent = open(path + "/device/uevent").read().upper()
+            if "V0000258AP0000010C" not in uevent:
+                continue
+            # vendor interface = the one exposing report id 6 as a feature
+            desc = open(path + "/device/report_descriptor", "rb").read()
+        except OSError:
+            # node is mid-teardown during a firmware reset; skip it
             continue
-        # vendor interface is the one whose descriptor contains report id 6 feature
-        desc = open(path + "/device/report_descriptor", "rb").read()
         if b"\x85\x06" in desc:  # Report ID 6 present
             return "/dev/" + os.path.basename(path)
     raise SystemExit(
@@ -358,13 +402,26 @@ def run_audio(k, argv):
     p.add_argument("--color", default="009bde", help="color for single mode")
     p.add_argument("--gain", type=float, default=1.0, help="amplitude multiplier")
     p.add_argument("--smooth", type=float, default=1.0, help="smoothness multiplier")
-    p.add_argument("--shape", choices=["wave", "bars"], default="wave")
+    p.add_argument(
+        "--effect",
+        "--shape",  # backward-compatible alias
+        dest="effect",
+        choices=["wave", "bars", "vortex", "ripple"],
+        default="wave",
+        help="wave/bars = spectrum shapes; vortex/ripple = 2D audio-reactive fields",
+    )
     p.add_argument(
         "--scroll",
         type=float,
         default=0.15,
         help="colorful-mode gradient scroll speed, hue cycles/sec "
-        "left-to-right (0 = static)",
+        "left-to-right (0 = static); ignored by vortex (it spins on its own)",
+    )
+    p.add_argument(
+        "--radius",
+        type=float,
+        default=0.18,
+        help="vortex event-horizon (dark hole) radius, 0..1 (default 0.18)",
     )
     p.add_argument("--fps", type=float, default=30.0)
     p.add_argument("--rate", type=int, default=48000)
@@ -379,7 +436,7 @@ def run_audio(k, argv):
     tap = AudioTap(o.source, o.rate, N)
     base = parse_hex(o.color)
     print(
-        f"audio-reactive: source={tap.source} mode={o.mode} shape={o.shape} "
+        f"audio-reactive: source={tap.source} mode={o.mode} effect={o.effect} "
         f"gain={o.gain} smooth={o.smooth} fps={o.fps:g}"
     )
 
@@ -391,6 +448,8 @@ def run_audio(k, argv):
     ref, REF_DECAY, REF_FLOOR = 1e-3, 0.998, 2e-4  # slow auto-gain reference
     levels = [0.0] * ncols
     raw = [0.0] * ncols
+    rot_phase = 0.0   # accumulated vortex rotation (revolutions)
+    ring_phase = 0.0  # accumulated ripple travel (ring cycles)
     t0 = time.monotonic()
     frames = 0
     try:
@@ -413,14 +472,45 @@ def run_audio(k, argv):
                 + (levels[max(i - 1, 0)] + levels[min(i + 1, ncols - 1)]) * spatial / 2
                 for i in range(ncols)
             ]
-            # subtracting the phase makes the gradient drift rightward
-            phase = (tstart - t0) * o.scroll
+            # per-frame audio features driving the 2D field effects
+            t = tstart - t0
+            energy = sum(levels) / ncols
+            bass = (levels[0] + levels[1] + levels[2] + levels[3]) / 4.0
+            hole = ring = 0.0
+            if o.effect == "vortex":
+                rot_phase += (VORTEX_BASE + energy * VORTEX_SPIN) * frame_dt
+                hole = o.radius + bass * HOLE_SWELL  # event horizon breathes
+                ring = hole + RING_GAP + bass * RING_PUSH  # disk shoved out by bass
+            elif o.effect == "ripple":
+                ring_phase += (RIPPLE_BASE + bass * RIPPLE_SPEED) * frame_dt
+
             for name, col, row in LAYOUT:
-                cov = cell_coverage(disp[col], row, o.shape)
+                if o.effect == "vortex":
+                    nx, ny, rad, ang = GEOM[name]
+                    if rad < hole:
+                        val = 0.0  # inside the event horizon: dark void
+                    else:
+                        d = rad - ring
+                        shape = math.exp(-(d * d) / (2.0 * RING_W * RING_W))
+                        # each band lights its own angular sector of the ring
+                        bi = int((ang / TAU + 0.5) * ncols) % ncols
+                        val = shape * (0.12 + 0.88 * disp[bi])
+                    # rainbow wrapped around the ring; rot_phase spins it
+                    hue = ang / TAU + rot_phase + rad * 0.15
+                elif o.effect == "ripple":
+                    nx, ny, rad, ang = GEOM[name]
+                    ring = 0.5 + 0.5 * math.cos((rad * RIPPLE_RINGS - ring_phase) * TAU)
+                    core = max(0.0, 1.0 - rad * 1.8) * bass
+                    val = min(1.0, ring * (0.12 + 0.88 * energy) + core)
+                    hue = rad - o.scroll * t
+                else:  # wave / bars: column spectrum, scrolling rainbow
+                    val = cell_coverage(disp[col], row, o.effect)
+                    hue = col / ncols - o.scroll * t
+
                 if o.mode == "colorful":
-                    k.set_key(name, *hsv((col / ncols - phase) % 1.0, v=cov))
+                    k.set_key(name, *hsv(hue % 1.0, v=val))
                 else:
-                    k.set_key(name, *(int(c * cov) for c in base))
+                    k.set_key(name, *(int(c * val) for c in base))
             tflush = time.monotonic()
             try:
                 k.flush()
@@ -454,17 +544,53 @@ def run_audio(k, argv):
     print(f"{frames} frames in {time.monotonic() - t0:.1f}s")
 
 
+def _flush(k):
+    """Flush the current frame, transparently recovering from a firmware reset."""
+    try:
+        k.flush()
+    except OSError as e:
+        if e.errno not in Kbd.GONE_ERRNOS:
+            raise
+        print("keyboard dropped off the bus (firmware reset), reconnecting...")
+        if not k.reopen():
+            raise SystemExit("reconnect failed")
+        print(f"reconnected: {k.dev}")
+        try:
+            k.flush()
+        except OSError:
+            pass
+
+
+def hold(k, label, interval=1.0):
+    """Keep the current frame on the board until Ctrl-C. These keyboards revert
+    to their onboard firmware lighting once host traffic stops, so we re-send
+    the frame on an interval to hold it (and ride out the board's resets)."""
+    print(f"holding {label}; press Ctrl-C to stop")
+    try:
+        while True:
+            time.sleep(interval)
+            _flush(k)
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
     a = sys.argv[1:]
     if not a:
         print(__doc__)
         return 1
+    # color modes hold the frame until Ctrl-C (the board reverts to onboard
+    # lighting when streaming stops); --once sets one frame and exits.
+    once = "--once" in a
+    a = [x for x in a if x != "--once"]
     cmd = a[0]
     k = Kbd()
     print(f"device: {k.dev}")
     if cmd == "color":
         k.fill(*parse_hex(a[1]))
         k.flush()
+        if not once:
+            hold(k, "color")
     elif cmd == "off":
         k.clear()
         k.flush()
@@ -473,25 +599,31 @@ def main():
         for name, col in zip(a[1::2], a[2::2]):
             k.set_key(name.lower(), *parse_hex(col))
         k.flush()
+        if not once:
+            hold(k, "key colors")
     elif cmd == "gradient":
         c1, c2 = parse_hex(a[1]), parse_hex(a[2])
         for name, col, row in LAYOUT:
             t = col / MAXCOL
             k.set_key(name, *(int(x + (y - x) * t) for x, y in zip(c1, c2)))
         k.flush()
+        if not once:
+            hold(k, "gradient")
     elif cmd == "rainbow":
         for name, col, row in LAYOUT:
             k.set_key(name, *hsv(col / (MAXCOL + 1)))
         k.flush()
+        if not once:
+            hold(k, "rainbow")
     elif cmd == "wave":
-        dur = float(a[1]) if len(a) > 1 else 10
+        dur = float(a[1]) if len(a) > 1 else None  # None = run until Ctrl-C
         t0 = time.time()
         try:
-            while time.time() - t0 < dur:
+            while dur is None or time.time() - t0 < dur:
                 ph = (time.time() - t0) * 0.4
                 for name, col, row in LAYOUT:
                     k.set_key(name, *hsv((col / (MAXCOL + 1) + ph) % 1.0))
-                k.flush()
+                _flush(k)
                 time.sleep(1 / 60)
         except KeyboardInterrupt:
             pass

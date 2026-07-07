@@ -44,13 +44,21 @@ takes effect.
 **3. Try it:**
 
 ```bash
-python3 hydra_rgb.py color ff0000     # whole board red
+python3 hydra_rgb.py color ff0000     # whole board red (Ctrl-C to stop)
 python3 hydra_rgb.py rainbow          # rainbow across the keys
 python3 hydra_rgb.py off              # everything off
 ```
 
 If the board turned red, you're done. If you got `Permission denied`, see
 Troubleshooting below.
+
+> **Heads up:** `color`, `rainbow`, `gradient`, `key`, and `wave` keep
+> running and hold their colors until you press **Ctrl-C**. That's on
+> purpose — the keyboard snaps back to its own built-in lighting the moment
+> the program stops, so the tool stays alive to hold your colors in place.
+> If you'd rather set a color and have the command exit right away (e.g.
+> from a startup script), add `--once`: `python3 hydra_rgb.py color ff0000
+> --once`.
 
 ## 🎵 Audio-reactive mode
 
@@ -64,40 +72,119 @@ row. It captures whatever your system is outputting (Spotify, YouTube,
 games — anything), regardless of whether it's going to speakers or
 headphones. Press **Ctrl-C** to stop.
 
+### Effects (`--effect`)
+
+Pick the visual style. All four react to your audio in real time:
+
+| Effect | Looks like | Reacts to |
+|---|---|---|
+| `wave` *(default)* | a spectrum that swells out from the home row | each column = one frequency band |
+| `bars` | a classic bottom-up equalizer | column height = band loudness |
+| `vortex` | a **black hole** — dark void in the middle with a rainbow accretion ring swirling around it | the rainbow **spins faster the louder it gets**; each frequency lights its own slice of the ring; **bass swells the hole and shoves the ring outward** so beats pulse it |
+| `ripple` | concentric rings breathing out from the middle | bass hits push the rings outward; overall loudness sets the brightness |
+
+```bash
+python3 hydra_rgb.py audio --effect vortex
+python3 hydra_rgb.py audio --effect ripple
+python3 hydra_rgb.py audio --effect bars
+```
+
 ### Make it yours
+
+These knobs work with every effect:
 
 | Option | What it does | Default |
 |---|---|---|
 | `--mode colorful` | rainbow colors across the keyboard | ✔ default |
 | `--mode single --color ff2000` | one color of your choice | |
-| `--gain 1.5` | wave amplitude multiplier — bigger number = wilder wave. Try `0.5`–`3` | `1.0` |
-| `--smooth 2` | smoothness multiplier — bigger = silkier, slower waves; smaller = twitchy and snappy. Try `0.5`–`3` | `1.0` |
-| `--scroll 0.3` | how fast the rainbow drifts left-to-right across the keys, in cycles per second. `0` freezes it in place | `0.15` |
-| `--shape bars` | bottom-up equalizer bars instead of the center-out wave | `wave` |
+| `--gain 1.5` | amplitude multiplier — bigger number = wilder reaction. Try `0.5`–`3` | `1.0` |
+| `--smooth 2` | smoothness multiplier — bigger = silkier, slower motion; smaller = twitchy and snappy. Try `0.5`–`3` | `1.0` |
+| `--scroll 0.3` | how fast the rainbow drifts across the keys, in cycles per second. `0` freezes the color in place (`vortex` ignores this — it spins on its own) | `0.15` |
+| `--radius 0.45` | **`vortex` only** — size of the dark hole in the middle (`0`–`1`). Bigger = wider void, ring pushed further out | `0.18` |
 | `--fps 60` | frames per second. Default 30 looks smooth and is light on CPU; raise it up to ~60 (the board's ceiling) for silkier motion | `30` |
 
 Examples:
 
 ```bash
+python3 hydra_rgb.py audio --effect vortex --radius 0.4         # black hole, wider void
+python3 hydra_rgb.py audio --effect ripple --mode single --color 00ffcc
 python3 hydra_rgb.py audio --mode single --color 00ffcc --smooth 2
-python3 hydra_rgb.py audio --shape bars --gain 1.5 --smooth 0.6
+python3 hydra_rgb.py audio --effect bars --gain 1.5 --smooth 0.6
 ```
 
 Volume doesn't matter — the visualizer auto-levels to the music's own
 dynamics, and `--gain` scales on top of that.
+
+> `--shape` is the old name for `--effect` and still works, so any older
+> commands you have keep running.
 
 ### Other commands
 
 ```bash
 python3 hydra_rgb.py key w ff0000 a ff0000 s ff0000 d ff0000   # light up WASD
 python3 hydra_rgb.py gradient ff00ff 00ffff                    # left→right gradient
-python3 hydra_rgb.py wave 30                                   # rainbow animation, 30s
+python3 hydra_rgb.py wave                                      # rainbow animation, forever
+python3 hydra_rgb.py wave 30                                   # ...or just 30 seconds
 ```
+
+All of these hold until **Ctrl-C** (add `--once` to set one frame and exit).
+`wave` runs forever unless you give it a number of seconds.
 
 Key names: letters/digits as printed, plus `esc tab capslock lshift rshift
 lctrl rctrl lwin lalt ralt fn space enter backspace del home pgup pgdn up
 down left right minus equal lbracket rbracket backslash semicolon quote
 comma period slash`.
+
+## ✨ Fun commands to try
+
+Copy-paste any of these. Press **Ctrl-C** to stop.
+
+### 🎵 Audio-reactive (put some music on first)
+
+```bash
+# ⭐ the black hole — wide dark void, extra punchy
+python3 hydra_rgb.py audio --effect vortex --radius 0.4 --gain 1.5
+
+# neon black hole — hot-pink accretion ring, no rainbow
+python3 hydra_rgb.py audio --effect vortex --mode single --color ff0055
+
+# bass ripples breathing out from the center
+python3 hydra_rgb.py audio --effect ripple --gain 1.4 --smooth 1.5
+
+# aggressive twitchy equalizer — snaps hard on every beat
+python3 hydra_rgb.py audio --effect bars --smooth 0.5 --gain 2
+
+# dreamy chill wave — slow, silky, barely-drifting colors
+python3 hydra_rgb.py audio --effect wave --smooth 2.5 --scroll 0.05
+
+# rave mode — fast rainbow ripping across the keys
+python3 hydra_rgb.py audio --scroll 0.6 --gain 1.5
+
+# cyberpunk cyan rings
+python3 hydra_rgb.py audio --effect ripple --mode single --color 00ffcc
+```
+
+### 🌈 Ambient (no music needed)
+
+```bash
+python3 hydra_rgb.py wave                     # endless flowing rainbow
+python3 hydra_rgb.py gradient ff6a00 8a2be2   # sunset: orange → purple
+python3 hydra_rgb.py gradient 001b8a 00ffd5   # deep ocean: navy → aqua
+python3 hydra_rgb.py color 00ffaa             # solid neon mint
+python3 hydra_rgb.py key w ff2200 a ff2200 s ff2200 d ff2200   # gamer WASD
+```
+
+### The three knobs to play with
+
+- **`--gain`** = intensity. `0.5` = subtle, `2`+ = wild.
+- **`--smooth`** = personality. Low (`0.4`) = twitchy and snappy; high
+  (`2.5`) = liquid and dreamy.
+- **`--scroll`** = how fast the rainbow drifts. `0` freezes the color,
+  `0.6` is a full-on rave.
+
+Mix them freely with any `--effect` (`wave`/`bars`/`vortex`/`ripple`) and
+`--mode single --color <hex>`. Start with the ⭐ vortex — with a bass-heavy
+track it looks the best.
 
 ## Troubleshooting
 
@@ -118,10 +205,12 @@ actually listening on:
 python3 hydra_rgb.py audio --source alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
 ```
 
-**The lights froze / show an old frame** — the visualizer only draws while
-it's running; the board holds the last frame forever. Run
-`python3 hydra_rgb.py off`, or press your Fn lighting hotkey to hand
-control back to the keyboard's built-in effects.
+**My colors vanished / the keyboard went back to its own lighting** — the
+program stopped. These modes only persist while the tool is running,
+because the keyboard reasserts its built-in lighting the instant streaming
+stops. Keep the command running (it holds until Ctrl-C), or add it to your
+startup so it relaunches. To go back to the board's own effects on purpose,
+just stop the tool or press your Fn lighting hotkey.
 
 **It says "keyboard dropped off the bus, reconnecting..."** — the board's
 firmware reset and re-enumerated; the tool waits for it to come back (~1 s)

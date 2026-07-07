@@ -42,8 +42,10 @@ Packet layout (520 bytes, report ID included):
 
 - Colors latch immediately; **no init handshake and no apply command**.
 - Stream frames at will (60 fps works; the reference plugin paces ~1 ms).
-- The board keeps showing the last streamed frame until an onboard effect
-  (Fn hotkey) or power cycle overrides it.
+- **The board reverts to its onboard lighting after host traffic stops** (an
+  idle timeout of a few seconds), so a single frame does not persist. To hold
+  a static color, re-send it on an interval (`hydra_rgb.py` keeps ~1 Hz
+  keep-alives for its color/wave modes). Fn hotkeys also override at any time.
 - One SET_FEATURE takes ~11.6 ms on the wire (520 bytes over a full-speed
   EP0 = 9 × 64-byte data stages) — ~60 fps is the practical frame ceiling.
 - **Firmware reset quirk**: under sustained streaming the MCU occasionally
@@ -85,7 +87,9 @@ directions.
   audio` subcommands, auto-detects the hidraw node, no dependencies. `audio`
   is a system-sound visualizer: parec monitor capture -> pure-python 1024-pt
   FFT -> 16 log-spaced bands (one per column) with auto-gain, `--mode
-  colorful|single`, `--shape wave|bars`, `--gain`, `--smooth`.
+  colorful|single`, `--effect wave|bars|vortex|ripple` (vortex/ripple are
+  2D field effects using the per-key GEOM angle/radius table), `--gain`,
+  `--smooth`, `--scroll`. `--shape` is a back-compat alias for `--effect`.
 - `probe.py` — GET/SET feature-report probe, state snapshot + diff.
 - `usbmon_sniff.py` — dependency-free usbmon binary-interface sniffer
   (decodes SET_REPORT/GET_REPORT control transfers): `usbmon_sniff.py <bus>
