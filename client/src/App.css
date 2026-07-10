@@ -1,0 +1,77 @@
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+header h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: .2px; }
+
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: #8b93a7; font-size: 13px;
+}
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: #cf5b5b; }
+.status.ok { color: #cfe0ff; }
+.status.ok .dot { background: #57d38c; box-shadow: 0 0 8px #57d38c88; }
+
+.error {
+  background: #3a1b1b; border: 1px solid #7a3b3b; color: #ffd7d7;
+  border-radius: 8px; padding: 8px 12px; font-size: 13px;
+}
+
+.panel, .board-wrap {
+  background: #12151d; border: 1px solid #232838;
+  border-radius: 14px; padding: 16px 18px;
+}
+.panel { display: flex; flex-direction: column; gap: 14px; }
+
+.effects { display: flex; gap: 8px; flex-wrap: wrap; }
+.effects button {
+  background: #1b2030; border: 1px solid #2b3145; color: #e6e8ee;
+  border-radius: 8px; padding: 7px 14px; font: inherit; cursor: pointer;
+  text-transform: capitalize; transition: background .1s, border-color .1s;
+}
+.effects button:hover { border-color: #3a4568; background: #222840; }
+.effects button.on { background: #2b6cff33; border-color: #6ea8ff; color: #cfe0ff; }
+
+.sliders { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.sliders label {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: #b9c0d2; font-size: 13px;
+}
+.sliders b { color: #cfe0ff; min-width: 20px; text-align: right; }
+input[type="range"] { accent-color: #6ea8ff; }
+input[type="color"] {
+  width: 34px; height: 28px; border: none; background: none; padding: 0; cursor: pointer;
+}
+
+.board {
+  display: grid;
+  grid-auto-rows: 40px;
+  gap: 6px;
+}
+.key {
+  border-radius: 7px;
+  background: #05060a;
+  border: 1px solid #1a1f2c;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: #ffffffcc; text-shadow: 0 1px 2px #000a;
+  overflow: hidden; user-select: none;
+  transition: box-shadow .05s;
+}
+
+footer {
+  display: flex; gap: 20px; margin-top: 14px;
+  color: #8b93a7; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+footer b { color: #cfe0ff; }

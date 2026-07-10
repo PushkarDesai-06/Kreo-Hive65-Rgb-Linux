@@ -90,6 +90,12 @@ directions.
   colorful|single`, `--effect wave|bars|vortex|ripple` (vortex/ripple are
   2D field effects using the per-key GEOM angle/radius table), `--gain`,
   `--smooth`, `--scroll`. `--shape` is a back-compat alias for `--effect`.
+- `kbd_ws_server.py` — zero-dep WebSocket bridge (RFC6455 on stdlib) that
+  streams RGB frames from any app to the board via a coalescing latest-wins
+  writer thread (~12 ms latency). Reuses the `Kbd` driver. Primary frame =
+  binary 204 bytes (68 keys × RGB); also JSON keymap/grid/fill. Emits a
+  TS client + `useKeyboard` hook + `schema.json` via `emit-client <dir>`
+  (see `client/`).
 - `probe.py` — GET/SET feature-report probe, state snapshot + diff.
 - `usbmon_sniff.py` — dependency-free usbmon binary-interface sniffer
   (decodes SET_REPORT/GET_REPORT control transfers): `usbmon_sniff.py <bus>

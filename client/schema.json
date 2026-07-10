@@ -1,0 +1,498 @@
+{
+  "type": "schema",
+  "device": "BY Tech / Kreo Hive 65 (258a:010c)",
+  "grid": {
+    "cols": 16,
+    "rows": 5
+  },
+  "keyCount": 68,
+  "slotCount": 126,
+  "maxFps": 60,
+  "primaryFormat": "binary",
+  "binaryFrame": {
+    "bytes": 204,
+    "layout": "R,G,B per key, order = keys[].index"
+  },
+  "rawFrame": {
+    "bytes": 378,
+    "layout": "R,G,B per HID slot (126 slots)"
+  },
+  "keys": [
+    {
+      "index": 0,
+      "name": "esc",
+      "col": 0,
+      "row": 0,
+      "slot": 1
+    },
+    {
+      "index": 1,
+      "name": "1",
+      "col": 1,
+      "row": 0,
+      "slot": 7
+    },
+    {
+      "index": 2,
+      "name": "2",
+      "col": 2,
+      "row": 0,
+      "slot": 13
+    },
+    {
+      "index": 3,
+      "name": "3",
+      "col": 3,
+      "row": 0,
+      "slot": 19
+    },
+    {
+      "index": 4,
+      "name": "4",
+      "col": 4,
+      "row": 0,
+      "slot": 25
+    },
+    {
+      "index": 5,
+      "name": "5",
+      "col": 5,
+      "row": 0,
+      "slot": 31
+    },
+    {
+      "index": 6,
+      "name": "6",
+      "col": 6,
+      "row": 0,
+      "slot": 37
+    },
+    {
+      "index": 7,
+      "name": "7",
+      "col": 7,
+      "row": 0,
+      "slot": 43
+    },
+    {
+      "index": 8,
+      "name": "8",
+      "col": 8,
+      "row": 0,
+      "slot": 49
+    },
+    {
+      "index": 9,
+      "name": "9",
+      "col": 9,
+      "row": 0,
+      "slot": 55
+    },
+    {
+      "index": 10,
+      "name": "0",
+      "col": 10,
+      "row": 0,
+      "slot": 61
+    },
+    {
+      "index": 11,
+      "name": "minus",
+      "col": 11,
+      "row": 0,
+      "slot": 67
+    },
+    {
+      "index": 12,
+      "name": "equal",
+      "col": 12,
+      "row": 0,
+      "slot": 73
+    },
+    {
+      "index": 13,
+      "name": "backspace",
+      "col": 13,
+      "row": 0,
+      "slot": 79
+    },
+    {
+      "index": 14,
+      "name": "home",
+      "col": 15,
+      "row": 0,
+      "slot": 91
+    },
+    {
+      "index": 15,
+      "name": "tab",
+      "col": 0,
+      "row": 1,
+      "slot": 2
+    },
+    {
+      "index": 16,
+      "name": "q",
+      "col": 1,
+      "row": 1,
+      "slot": 8
+    },
+    {
+      "index": 17,
+      "name": "w",
+      "col": 2,
+      "row": 1,
+      "slot": 14
+    },
+    {
+      "index": 18,
+      "name": "e",
+      "col": 3,
+      "row": 1,
+      "slot": 20
+    },
+    {
+      "index": 19,
+      "name": "r",
+      "col": 4,
+      "row": 1,
+      "slot": 26
+    },
+    {
+      "index": 20,
+      "name": "t",
+      "col": 5,
+      "row": 1,
+      "slot": 32
+    },
+    {
+      "index": 21,
+      "name": "y",
+      "col": 6,
+      "row": 1,
+      "slot": 38
+    },
+    {
+      "index": 22,
+      "name": "u",
+      "col": 7,
+      "row": 1,
+      "slot": 44
+    },
+    {
+      "index": 23,
+      "name": "i",
+      "col": 8,
+      "row": 1,
+      "slot": 50
+    },
+    {
+      "index": 24,
+      "name": "o",
+      "col": 9,
+      "row": 1,
+      "slot": 56
+    },
+    {
+      "index": 25,
+      "name": "p",
+      "col": 10,
+      "row": 1,
+      "slot": 62
+    },
+    {
+      "index": 26,
+      "name": "lbracket",
+      "col": 11,
+      "row": 1,
+      "slot": 68
+    },
+    {
+      "index": 27,
+      "name": "rbracket",
+      "col": 12,
+      "row": 1,
+      "slot": 74
+    },
+    {
+      "index": 28,
+      "name": "backslash",
+      "col": 13,
+      "row": 1,
+      "slot": 80
+    },
+    {
+      "index": 29,
+      "name": "del",
+      "col": 15,
+      "row": 1,
+      "slot": 92
+    },
+    {
+      "index": 30,
+      "name": "capslock",
+      "col": 0,
+      "row": 2,
+      "slot": 3
+    },
+    {
+      "index": 31,
+      "name": "a",
+      "col": 1,
+      "row": 2,
+      "slot": 9
+    },
+    {
+      "index": 32,
+      "name": "s",
+      "col": 2,
+      "row": 2,
+      "slot": 15
+    },
+    {
+      "index": 33,
+      "name": "d",
+      "col": 3,
+      "row": 2,
+      "slot": 21
+    },
+    {
+      "index": 34,
+      "name": "f",
+      "col": 4,
+      "row": 2,
+      "slot": 27
+    },
+    {
+      "index": 35,
+      "name": "g",
+      "col": 5,
+      "row": 2,
+      "slot": 33
+    },
+    {
+      "index": 36,
+      "name": "h",
+      "col": 6,
+      "row": 2,
+      "slot": 39
+    },
+    {
+      "index": 37,
+      "name": "j",
+      "col": 7,
+      "row": 2,
+      "slot": 45
+    },
+    {
+      "index": 38,
+      "name": "k",
+      "col": 8,
+      "row": 2,
+      "slot": 51
+    },
+    {
+      "index": 39,
+      "name": "l",
+      "col": 9,
+      "row": 2,
+      "slot": 57
+    },
+    {
+      "index": 40,
+      "name": "semicolon",
+      "col": 10,
+      "row": 2,
+      "slot": 63
+    },
+    {
+      "index": 41,
+      "name": "quote",
+      "col": 11,
+      "row": 2,
+      "slot": 69
+    },
+    {
+      "index": 42,
+      "name": "enter",
+      "col": 13,
+      "row": 2,
+      "slot": 81
+    },
+    {
+      "index": 43,
+      "name": "pgup",
+      "col": 15,
+      "row": 2,
+      "slot": 93
+    },
+    {
+      "index": 44,
+      "name": "lshift",
+      "col": 0,
+      "row": 3,
+      "slot": 4
+    },
+    {
+      "index": 45,
+      "name": "z",
+      "col": 1,
+      "row": 3,
+      "slot": 10
+    },
+    {
+      "index": 46,
+      "name": "x",
+      "col": 2,
+      "row": 3,
+      "slot": 16
+    },
+    {
+      "index": 47,
+      "name": "c",
+      "col": 3,
+      "row": 3,
+      "slot": 22
+    },
+    {
+      "index": 48,
+      "name": "v",
+      "col": 4,
+      "row": 3,
+      "slot": 28
+    },
+    {
+      "index": 49,
+      "name": "b",
+      "col": 5,
+      "row": 3,
+      "slot": 34
+    },
+    {
+      "index": 50,
+      "name": "n",
+      "col": 6,
+      "row": 3,
+      "slot": 40
+    },
+    {
+      "index": 51,
+      "name": "m",
+      "col": 7,
+      "row": 3,
+      "slot": 46
+    },
+    {
+      "index": 52,
+      "name": "comma",
+      "col": 8,
+      "row": 3,
+      "slot": 52
+    },
+    {
+      "index": 53,
+      "name": "period",
+      "col": 9,
+      "row": 3,
+      "slot": 58
+    },
+    {
+      "index": 54,
+      "name": "slash",
+      "col": 10,
+      "row": 3,
+      "slot": 64
+    },
+    {
+      "index": 55,
+      "name": "rshift",
+      "col": 13,
+      "row": 3,
+      "slot": 82
+    },
+    {
+      "index": 56,
+      "name": "up",
+      "col": 14,
+      "row": 3,
+      "slot": 88
+    },
+    {
+      "index": 57,
+      "name": "pgdn",
+      "col": 15,
+      "row": 3,
+      "slot": 94
+    },
+    {
+      "index": 58,
+      "name": "lctrl",
+      "col": 0,
+      "row": 4,
+      "slot": 5
+    },
+    {
+      "index": 59,
+      "name": "lwin",
+      "col": 1,
+      "row": 4,
+      "slot": 11
+    },
+    {
+      "index": 60,
+      "name": "lalt",
+      "col": 2,
+      "row": 4,
+      "slot": 17
+    },
+    {
+      "index": 61,
+      "name": "space",
+      "col": 5,
+      "row": 4,
+      "slot": 35
+    },
+    {
+      "index": 62,
+      "name": "ralt",
+      "col": 8,
+      "row": 4,
+      "slot": 53
+    },
+    {
+      "index": 63,
+      "name": "fn",
+      "col": 9,
+      "row": 4,
+      "slot": 59
+    },
+    {
+      "index": 64,
+      "name": "rctrl",
+      "col": 10,
+      "row": 4,
+      "slot": 65
+    },
+    {
+      "index": 65,
+      "name": "left",
+      "col": 13,
+      "row": 4,
+      "slot": 83
+    },
+    {
+      "index": 66,
+      "name": "down",
+      "col": 14,
+      "row": 4,
+      "slot": 89
+    },
+    {
+      "index": 67,
+      "name": "right",
+      "col": 15,
+      "row": 4,
+      "slot": 95
+    }
+  ]
+}

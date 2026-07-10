@@ -161,16 +161,16 @@ GEOM = {
 # bright accretion disk whose rainbow gradient rotates around it (faster when
 # louder). Bass swells the horizon and shoves the ring outward; each frequency
 # band lights up its own sector of the ring.
-VORTEX_BASE = 0.10   # idle color-rotation, revolutions/sec
-VORTEX_SPIN = 1.2    # extra rev/sec at full energy
-HOLE_SWELL = 0.18    # how much bass grows the event-horizon radius
-RING_GAP = 0.28      # accretion ring sits this far outside the hole
-RING_PUSH = 0.22     # bass shoves the ring further out (beat ripple)
-RING_W = 0.16        # accretion-ring thickness (gaussian sigma)
+VORTEX_BASE = 0.10  # idle color-rotation, revolutions/sec
+VORTEX_SPIN = 1.2  # extra rev/sec at full energy
+HOLE_SWELL = 0.18  # how much bass grows the event-horizon radius
+RING_GAP = 0.28  # accretion ring sits this far outside the hole
+RING_PUSH = 0.22  # bass shoves the ring further out (beat ripple)
+RING_W = 0.16  # accretion-ring thickness (gaussian sigma)
 # ripple: concentric rings pushed outward by bass hits
 RIPPLE_RINGS = 2.5
-RIPPLE_BASE = 0.15   # idle ring cycles/sec
-RIPPLE_SPEED = 1.2   # extra cycles/sec driven by bass
+RIPPLE_BASE = 0.15  # idle ring cycles/sec
+RIPPLE_SPEED = 1.2  # extra cycles/sec driven by bass
 
 
 def find_device():
@@ -448,7 +448,7 @@ def run_audio(k, argv):
     ref, REF_DECAY, REF_FLOOR = 1e-3, 0.998, 2e-4  # slow auto-gain reference
     levels = [0.0] * ncols
     raw = [0.0] * ncols
-    rot_phase = 0.0   # accumulated vortex rotation (revolutions)
+    rot_phase = 0.0  # accumulated vortex rotation (revolutions)
     ring_phase = 0.0  # accumulated ripple travel (ring cycles)
     t0 = time.monotonic()
     frames = 0
