@@ -1,0 +1,20 @@
+{
+  "id": "hydra10",
+  "note": "PROVISIONAL stub. Protocol bits are from the hydra0049.py probe; the RGB region length (num_slots) and the key layout are NOT yet confirmed. Map the layout with `hydra_rgb.py walk --profile hydra10` and fill in `keys` below. See PROTOCOL.md and hydra0049.py.",
+  "name": "Portronics Hydra 10 (258a:0049) [provisional]",
+  "identity": { "usb_ids": ["258a:0049"], "report_id": 6 },
+  "protocol": {
+    "encoder": "standard",
+    "header": "060800000100ff03",
+    "payload_offset": 8,
+    "pkt_len": 1032,
+    "num_slots": 341,
+    "color_order": "rgb",
+    "keepalive_hz": 1.0
+  },
+  "layout": {
+    "rows": 1,
+    "cols": 1,
+    "keys": []
+  }
+}

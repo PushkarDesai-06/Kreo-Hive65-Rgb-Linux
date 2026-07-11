@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""RGB control for BY Tech / SinoWealth 68-key keyboard (258a:010c) on Linux.
+"""RGB control for SinoWealth / BY Tech RGB keyboards on Linux.
 
-Protocol (reverse-engineered; verified against SignalRGB Hydra 10 plugin):
-  HID SET_FEATURE on the vendor interface (usage page 0xFF00, interface 1),
-  report ID 0x06, 520 bytes:
-    [0x06, 0x08, 0x00, 0x00, 0x01, 0x00, 0x7A, 0x01] + rgb[378] + pad -> 520
-  rgb payload: per-LED triplets, LED index = column*6 + row + 1 (column-major,
-  6 slots/column). Colors latch immediately, no apply command.
+Each supported board is described by a JSON *profile* in profiles/ (USB id,
+frame format, and key→LED layout); the driver auto-detects the attached board
+and every effect reads its geometry from the profile, so the same code drives
+different-sized keyboards. Adding a board is a new profiles/<id>.json file — no
+code changes. See kbd_profiles.py. The default board is the Kreo Hive 65
+(258a:010c): report 6, 520-byte frame, 68 keys, LED index = col*6 + row + 1.
+
+Board selection (any subcommand):
+  --profile NAME     force a specific profile (see --list-profiles)
+  --device /dev/hidrawN   force the hidraw node
+  --vid XXXX --pid XXXX   also match this USB id (test an uninstalled rebrand)
+  --list-profiles    list known boards and exit
 
 Usage:
   hydra_rgb.py color <rrggbb>              # whole board one color
@@ -16,6 +22,8 @@ Usage:
   hydra_rgb.py wave [seconds]              # animated hue wave (forever if no time)
   hydra_rgb.py off                         # all LEDs off
   hydra_rgb.py raw <hex...>                # send raw feature report
+  hydra_rgb.py walk [--delay S] [--start N] [--end N]
+      # light one LED slot at a time to map a new board's layout (report-6 only)
 
   color/key/gradient/rainbow/wave stay on until Ctrl-C: the board reverts to
   its onboard lighting once streaming stops, so the tool holds the frame by
@@ -45,11 +53,12 @@ Usage:
     (PipeWire/PulseAudio); override with --source (see: pactl list short
     sources), or --source - to pipe raw s16le mono PCM on stdin.
 
-Device node autodetected from /sys/class/hidraw (BY Tech + vendor descriptor).
+Device node + profile autodetected from /sys/class/hidraw (USB id + report id).
 """
 
 import argparse
 import cmath
+import json
 import math
 import struct
 import subprocess
@@ -58,6 +67,8 @@ import os
 import fcntl
 import glob
 import time
+
+import kbd_profiles
 
 
 def _IOC(dirn, typ, nr, size):
@@ -68,101 +79,23 @@ def HIDIOCSFEATURE(length):
     return _IOC(3, "H", 0x06, length)
 
 
-HDR = bytes([0x06, 0x08, 0x00, 0x00, 0x01, 0x00, 0x7A, 0x01])
-PKT_LEN = 520
-NUM_SLOTS = 126  # firmware accepts 0x17A bytes = 126 LED slots
+# --- keyboard identity + protocol + layout live in profiles/*.json -----------
+# Loaded once at import; adding a board is a new JSON file, not a code change.
+# Each Kbd holds its own Profile (self.p) and every effect reads geometry/slots
+# from it, so the same code drives boards of different sizes and frame formats.
+PROFILES = kbd_profiles.load_all()
+DEFAULT_PROFILE = "hive65"
+_DEFAULT = PROFILES[DEFAULT_PROFILE]
 
-ROWS = 5
-# physical layout -> LED slot index (col*6 + row + 1), from the 68-key map
-LAYOUT = [
-    # (name, col, row)
-    ("esc", 0, 0),
-    ("1", 1, 0),
-    ("2", 2, 0),
-    ("3", 3, 0),
-    ("4", 4, 0),
-    ("5", 5, 0),
-    ("6", 6, 0),
-    ("7", 7, 0),
-    ("8", 8, 0),
-    ("9", 9, 0),
-    ("0", 10, 0),
-    ("minus", 11, 0),
-    ("equal", 12, 0),
-    ("backspace", 13, 0),
-    ("home", 15, 0),
-    ("tab", 0, 1),
-    ("q", 1, 1),
-    ("w", 2, 1),
-    ("e", 3, 1),
-    ("r", 4, 1),
-    ("t", 5, 1),
-    ("y", 6, 1),
-    ("u", 7, 1),
-    ("i", 8, 1),
-    ("o", 9, 1),
-    ("p", 10, 1),
-    ("lbracket", 11, 1),
-    ("rbracket", 12, 1),
-    ("backslash", 13, 1),
-    ("del", 15, 1),
-    ("capslock", 0, 2),
-    ("a", 1, 2),
-    ("s", 2, 2),
-    ("d", 3, 2),
-    ("f", 4, 2),
-    ("g", 5, 2),
-    ("h", 6, 2),
-    ("j", 7, 2),
-    ("k", 8, 2),
-    ("l", 9, 2),
-    ("semicolon", 10, 2),
-    ("quote", 11, 2),
-    ("enter", 13, 2),
-    ("pgup", 15, 2),
-    ("lshift", 0, 3),
-    ("z", 1, 3),
-    ("x", 2, 3),
-    ("c", 3, 3),
-    ("v", 4, 3),
-    ("b", 5, 3),
-    ("n", 6, 3),
-    ("m", 7, 3),
-    ("comma", 8, 3),
-    ("period", 9, 3),
-    ("slash", 10, 3),
-    ("rshift", 13, 3),
-    ("up", 14, 3),
-    ("pgdn", 15, 3),
-    ("lctrl", 0, 4),
-    ("lwin", 1, 4),
-    ("lalt", 2, 4),
-    ("space", 5, 4),
-    ("ralt", 8, 4),
-    ("fn", 9, 4),
-    ("rctrl", 10, 4),
-    ("left", 13, 4),
-    ("down", 14, 4),
-    ("right", 15, 4),
-]
-SLOT = {name: col * 6 + row + 1 for name, col, row in LAYOUT}
-MAXCOL = 15
+# Back-compat aliases bound to the default profile so kbd_ws_server.py (which
+# reads drv.LAYOUT / SLOT / NUM_SLOTS / MAXCOL / ROWS) keeps working unchanged.
+LAYOUT = _DEFAULT.keys_tuples
+SLOT = _DEFAULT.slot
+NUM_SLOTS = _DEFAULT.num_slots
+ROWS = _DEFAULT.rows
+MAXCOL = _DEFAULT.cols - 1
 
-# Per-key geometry for 2D (field) effects: normalized position, radius and
-# angle from the board's center. Columns/rows are each scaled to roughly
-# [-1, 1] so a "circle" fills the wide 16x5 grid. Precomputed once.
 TAU = 2.0 * math.pi
-_CX, _CY = (MAXCOL / 2.0) - 2, (ROWS - 1) / 2.0  # center at col 7.5, row 2
-_XN, _YN = MAXCOL / 2.0 + 0.5, (ROWS - 1) / 2.0 + 0.5
-GEOM = {
-    name: (
-        (col - _CX) / _XN,
-        (row - _CY) / _YN,
-        math.hypot((col - _CX) / _XN, (row - _CY) / _YN),
-        math.atan2((row - _CY) / _YN, (col - _CX) / _XN),
-    )
-    for name, col, row in LAYOUT
-}
 # vortex: a black hole. A dark event horizon sits in the middle, ringed by a
 # bright accretion disk whose rainbow gradient rotates around it (faster when
 # louder). Bass swells the horizon and shoves the ring outward; each frequency
@@ -179,35 +112,68 @@ RIPPLE_BASE = 0.05  # idle ring cycles/sec
 RIPPLE_SPEED = 0.8  # extra cycles/sec driven by bass
 
 
-def find_device():
-    for path in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
-        try:
-            uevent = open(path + "/device/uevent").read().upper()
-            if "V0000258AP0000010C" not in uevent:
-                continue
-            # vendor interface = the one exposing report id 6 as a feature
-            desc = open(path + "/device/report_descriptor", "rb").read()
-        except OSError:
-            # node is mid-teardown during a firmware reset; skip it
-            continue
-        if b"\x85\x06" in desc:  # Report ID 6 present
-            return "/dev/" + os.path.basename(path)
-    raise SystemExit(
-        "keyboard vendor interface not found (is it plugged in, wired mode?)"
-    )
+def _match_node(sysfs_path, profiles):
+    """Return the profile that owns this hidraw node (USB id matches and the
+    profile's report id is present on this interface), or None."""
+    try:
+        with open(sysfs_path + "/device/uevent") as f:
+            uevent = f.read().upper()
+        with open(sysfs_path + "/device/report_descriptor", "rb") as f:
+            desc = f.read()
+    except OSError:
+        # node is mid-teardown during a firmware reset; skip it
+        return None
+    for prof in profiles:
+        if prof.matches_uevent(uevent) and prof.desc_marker() in desc:
+            return prof
+    return None
+
+
+def find_device(profiles=None, sysfs_root="/sys/class/hidraw"):
+    """Scan hidraw nodes for a known keyboard. Returns (devnode, Profile).
+
+    `profiles` restricts the search (e.g. to a --profile choice); default is all
+    loaded profiles. On multiple matches with no restriction, the first is used
+    and the alternatives are reported so the user can disambiguate."""
+    if profiles is None:
+        profiles = list(PROFILES.values())
+    matches = []
+    for path in sorted(glob.glob(sysfs_root + "/hidraw*")):
+        prof = _match_node(path, profiles)
+        if prof is not None:
+            matches.append(("/dev/" + os.path.basename(path), prof))
+    if not matches:
+        known = ", ".join(sorted({u for p in profiles for u in p.usb_ids}))
+        raise SystemExit(
+            "keyboard vendor interface not found (is it plugged in, wired mode?). "
+            f"known ids: {known} — see --list-profiles"
+        )
+    if len(matches) > 1:
+        alts = ", ".join(f"{d} ({p.id})" for d, p in matches)
+        print(f"multiple keyboards matched: {alts}; using {matches[0][0]} "
+              "(pick one with --device/--profile)", file=sys.stderr)
+    return matches[0]
 
 
 class Kbd:
     # errnos seen when the board's firmware resets and it re-enumerates
     GONE_ERRNOS = (5, 19, 32, 71)  # EIO, ENODEV, EPIPE, EPROTO
 
-    def __init__(self, dev=None):
-        self.dev = dev or find_device()
+    def __init__(self, profile=None, dev=None):
+        if profile is None or dev is None:
+            found_dev, found_prof = find_device(
+                [profile] if profile is not None else None
+            )
+            profile = profile or found_prof
+            dev = dev or found_dev
+        self.p = profile
+        self.dev = dev
         self.fd = os.open(self.dev, os.O_RDWR)
-        self.rgb = bytearray(NUM_SLOTS * 3)
+        self.rgb = bytearray(profile.num_slots * 3)
 
     def reopen(self, timeout=10.0):
-        """Reattach after a USB drop; the hidraw node may have moved."""
+        """Reattach after a USB drop; the hidraw node may have moved. Re-locks
+        onto the same profile so a firmware reset can't switch boards."""
         try:
             os.close(self.fd)
         except OSError:
@@ -216,7 +182,7 @@ class Kbd:
         denied = False
         while time.monotonic() < deadline:
             try:
-                self.dev = find_device()
+                self.dev = find_device([self.p])[0]
                 self.fd = os.open(self.dev, os.O_RDWR)
                 return True
             except PermissionError:
@@ -232,23 +198,29 @@ class Kbd:
         return False
 
     def set_slot(self, slot, r, g, b):
-        self.rgb[slot * 3 : slot * 3 + 3] = bytes((r, g, b))
+        # store in the board's wire byte order (e.g. GRB) so the buffer can be
+        # streamed as-is; 'rgb' boards are unaffected
+        self.rgb[slot * 3 : slot * 3 + 3] = bytes(
+            kbd_profiles.reorder(self.p.color_order, r, g, b)
+        )
 
     def set_key(self, name, r, g, b):
-        self.set_slot(SLOT[name], r, g, b)
+        self.set_slot(self.p.slot[name], r, g, b)
 
     def fill(self, r, g, b):
-        for s in range(NUM_SLOTS):
+        for s in range(self.p.num_slots):
             self.set_slot(s, r, g, b)
 
     def clear(self):
-        self.rgb = bytearray(NUM_SLOTS * 3)
+        self.rgb = bytearray(self.p.num_slots * 3)
+
+    def build_packet(self):
+        """The exact bytes flush() would SET_FEATURE — the testable seam."""
+        return self.p.encode(self.rgb)
 
     def flush(self):
-        pkt = bytearray(PKT_LEN)
-        pkt[:8] = HDR
-        pkt[8 : 8 + len(self.rgb)] = self.rgb
-        fcntl.ioctl(self.fd, HIDIOCSFEATURE(PKT_LEN), pkt, True)
+        pkt = bytearray(self.build_packet())
+        fcntl.ioctl(self.fd, HIDIOCSFEATURE(len(pkt)), pkt, True)
 
 
 def parse_hex(s):
@@ -408,14 +380,15 @@ class Spectrum:
         return out
 
 
-def cell_coverage(level, row, shape):
-    """Fraction [0..1] of a key at grid row 0(top)..4(bottom) lit by a column
-    level in [0..1]."""
-    if shape == "bars":  # grows bottom-up, 5 rows tall
-        return min(1.0, max(0.0, level * 5 - (4 - row)))
-    d = abs(row - 2)  # wave: mirrored around the home row
-    half = level * 2.5
-    if d == 0:
+def cell_coverage(level, row, rows, shape):
+    """Fraction [0..1] of a key at grid row 0(top)..rows-1(bottom) lit by a
+    column level in [0..1]. Scales to any row count (identical at rows=5)."""
+    if shape == "bars":  # grows bottom-up, `rows` tall
+        return min(1.0, max(0.0, level * rows - (rows - 1 - row)))
+    center = (rows - 1) / 2.0  # wave: mirrored around the middle row
+    d = abs(row - center)
+    half = level * (rows / 2.0)
+    if d < 0.5:
         return min(1.0, half * 2)
     return min(1.0, max(0.0, half - (d - 0.5)))
 
@@ -491,7 +464,7 @@ def run_audio(k, argv):
     p.add_argument("--debug", action="store_true")
     o = p.parse_args(argv)
 
-    ncols = MAXCOL + 1
+    ncols = k.p.cols
     N = 1024
     spec = Spectrum(N, o.rate, ncols)
     tap = AudioTap(o.source, o.rate, N)
@@ -559,9 +532,9 @@ def run_audio(k, argv):
             elif o.effect == "ripple":
                 ring_phase += (RIPPLE_BASE + bass * RIPPLE_SPEED) * frame_dt
 
-            for name, col, row in LAYOUT:
+            for name, col, row in k.p.keys_tuples:
                 if o.effect == "vortex":
-                    nx, ny, rad, ang = GEOM[name]
+                    nx, ny, rad, ang = k.p.geom[name]
                     if rad < hole:
                         val = 0.0  # inside the event horizon: dark void
                     else:
@@ -573,13 +546,13 @@ def run_audio(k, argv):
                     # rainbow wrapped around the ring; rot_phase spins it
                     hue = ang / TAU + rot_phase + rad * 0.15
                 elif o.effect == "ripple":
-                    nx, ny, rad, ang = GEOM[name]
+                    nx, ny, rad, ang = k.p.geom[name]
                     ring = 0.5 + 0.5 * math.cos((rad * RIPPLE_RINGS - ring_phase) * TAU)
                     core = max(0.0, 1.0 - rad * 1.8) * bass
                     val = min(1.0, ring * (0.12 + 0.88 * energy) + core)
                     hue = rad - o.scroll * t
                 else:  # wave / bars: column spectrum, scrolling gradient
-                    val = cell_coverage(disp[col], row, o.effect)
+                    val = cell_coverage(disp[col], row, k.p.rows, o.effect)
                     hue = col / ncols - o.scroll * t
 
                 if o.mode == "colorful":
@@ -647,10 +620,13 @@ def _flush(k):
             pass
 
 
-def hold(k, label, interval=1.0):
+def hold(k, label, interval=None):
     """Keep the current frame on the board until Ctrl-C. These keyboards revert
     to their onboard firmware lighting once host traffic stops, so we re-send
     the frame on an interval to hold it (and ride out the board's resets)."""
+    if interval is None:
+        hz = k.p.keepalive_hz
+        interval = 1.0 / hz if hz > 0 else 1.0
     print(f"holding {label}; press Ctrl-C to stop")
     try:
         while True:
@@ -660,8 +636,89 @@ def hold(k, label, interval=1.0):
         pass
 
 
+def run_walk(k, argv):
+    """Light one LED slot at a time so you can see which physical key each slot
+    drives — the way to map a brand-new board's layout. Strictly report-6 (the
+    RGB framebuffer), so it can never touch the report-5 flash/ISP channel."""
+    p = argparse.ArgumentParser(
+        prog="hydra_rgb.py walk",
+        description="sweep-light LED slots to map a new keyboard's layout",
+    )
+    p.add_argument("--delay", type=float, default=0.6, help="seconds per slot")
+    p.add_argument("--color", default="ffffff", help="slot color (default white)")
+    p.add_argument("--start", type=int, default=0)
+    p.add_argument("--end", type=int, default=None, help="last slot (default all)")
+    o = p.parse_args(argv)
+    end = o.end if o.end is not None else k.p.num_slots - 1
+    col = parse_hex(o.color)
+    print(f"walking slots {o.start}..{end} on {k.p.name}.")
+    print("note which physical key lights for each slot; Ctrl-C to stop.\n")
+    lit = []
+    try:
+        for s in range(o.start, end + 1):
+            k.clear()
+            k.set_slot(s, *col)
+            _flush(k)
+            print(f"  slot {s}")
+            lit.append(s)
+            time.sleep(o.delay)
+    except KeyboardInterrupt:
+        print("\n(stopped)")
+    finally:
+        k.clear()
+        _flush(k)
+    # emit a layout skeleton to fill in: replace each name/col/row from what you
+    # saw, then save as profiles/<id>.json (copy the protocol block from a probe)
+    skel = [{"name": f"slot{s}", "col": 0, "row": 0, "slot": s} for s in lit]
+    print("\n# layout skeleton (edit name/col/row per what lit, then save):")
+    print(json.dumps({"keys": skel}, indent=2))
+
+
+def _take_opt(a, name):
+    """Pull `--name VALUE` out of arg list a, returning VALUE (or None)."""
+    if name in a:
+        i = a.index(name)
+        val = a[i + 1] if i + 1 < len(a) else None
+        del a[i : i + 2]
+        return val
+    return None
+
+
+def _select_profile(prof_name, vid, pid):
+    """Resolve the profile list to search: a named profile, optionally with an
+    extra runtime VID:PID (for an uninstalled same-family board)."""
+    if prof_name is not None:
+        if prof_name not in PROFILES:
+            raise SystemExit(
+                f"unknown profile {prof_name!r}; known: {', '.join(sorted(PROFILES))}"
+            )
+        chosen = [PROFILES[prof_name]]
+    else:
+        chosen = list(PROFILES.values())
+    if vid and pid:
+        extra = kbd_profiles._norm_usb(f"{vid}:{pid}")
+        for p in chosen:  # match this id too, using the chosen board's protocol
+            if extra not in p.usb_ids:
+                p.usb_ids.append(extra)
+    return chosen
+
+
 def main():
     a = sys.argv[1:]
+    if not a:
+        print(__doc__)
+        return 1
+    # global options (parsed out before the subcommand)
+    prof_name = _take_opt(a, "--profile")
+    dev_override = _take_opt(a, "--device")
+    vid = _take_opt(a, "--vid")
+    pid = _take_opt(a, "--pid")
+    profiles = _select_profile(prof_name, vid, pid)
+    if "--list-profiles" in a:
+        for pid_, p in PROFILES.items():
+            print(f"{pid_:12s} {p.name}  ({p.key_count()} keys, {p.cols}x{p.rows}, "
+                  f"{p.pkt_len}B, usb={','.join(p.usb_ids)})")
+        return 0
     if not a:
         print(__doc__)
         return 1
@@ -670,8 +727,17 @@ def main():
     once = "--once" in a
     a = [x for x in a if x != "--once"]
     cmd = a[0]
-    k = Kbd()
-    print(f"device: {k.dev}")
+    if dev_override:
+        # forced node: detect its profile (unless --profile pinned it)
+        sysfs = os.path.join("/sys/class/hidraw", os.path.basename(dev_override))
+        prof = PROFILES[prof_name] if prof_name else _match_node(sysfs, profiles)
+        if prof is None:
+            raise SystemExit(f"{dev_override}: no known profile matches this node")
+        k = Kbd(profile=prof, dev=dev_override)
+    else:
+        dev, prof = find_device(profiles)
+        k = Kbd(profile=prof, dev=dev)
+    print(f"device: {k.dev} ({k.p.name})")
     if cmd == "color":
         k.fill(*parse_hex(a[1]))
         k.flush()
@@ -689,15 +755,16 @@ def main():
             hold(k, "key colors")
     elif cmd == "gradient":
         c1, c2 = parse_hex(a[1]), parse_hex(a[2])
-        for name, col, row in LAYOUT:
-            t = col / MAXCOL
+        denom = (k.p.cols - 1) or 1
+        for name, col, row in k.p.keys_tuples:
+            t = col / denom
             k.set_key(name, *(int(x + (y - x) * t) for x, y in zip(c1, c2)))
         k.flush()
         if not once:
             hold(k, "gradient")
     elif cmd == "rainbow":
-        for name, col, row in LAYOUT:
-            k.set_key(name, *hsv(col / (MAXCOL + 1)))
+        for name, col, row in k.p.keys_tuples:
+            k.set_key(name, *hsv(col / k.p.cols))
         k.flush()
         if not once:
             hold(k, "rainbow")
@@ -707,14 +774,16 @@ def main():
         try:
             while dur is None or time.time() - t0 < dur:
                 ph = (time.time() - t0) * 0.4
-                for name, col, row in LAYOUT:
-                    k.set_key(name, *hsv((col / (MAXCOL + 1) + ph) % 1.0))
+                for name, col, row in k.p.keys_tuples:
+                    k.set_key(name, *hsv((col / k.p.cols + ph) % 1.0))
                 _flush(k)
                 time.sleep(1 / 60)
         except KeyboardInterrupt:
             pass
     elif cmd == "audio":
         run_audio(k, a[1:])
+    elif cmd == "walk":
+        run_walk(k, a[1:])
     elif cmd == "raw":
         data = bytes.fromhex("".join(a[1:]))
         buf = bytearray(data)
