@@ -3,7 +3,8 @@
 Control your Kreo Hive 65 keyboard's RGB from Linux — no Windows software
 needed. Set any color per key, paint gradients, and run an **audio-reactive
 mode** that turns the keyboard into a live soundwave for whatever your PC is
-playing.
+playing — and when the sound stops, it drifts into an ambient gradient on
+its own.
 
 Works with the wired 65% keyboard that shows up on USB as `258a:010c`
 "BY Tech Gaming Keyboard" (the Kreo Hive 65 — and rebrands of the same
@@ -80,7 +81,7 @@ Pick the visual style. All four react to your audio in real time:
 |---|---|---|
 | `wave` *(default)* | a spectrum that swells out from the home row | each column = one frequency band |
 | `bars` | a classic bottom-up equalizer | column height = band loudness |
-| `vortex` | a **black hole** — dark void in the middle with a rainbow accretion ring swirling around it | the rainbow **spins faster the louder it gets**; each frequency lights its own slice of the ring; **bass swells the hole and shoves the ring outward** so beats pulse it |
+| `vortex` | a **black hole** — dark void in the middle with a color accretion ring swirling around it | the colors **spin faster the louder it gets**; each frequency lights its own slice of the ring; **bass swells the hole and shoves the ring outward** so beats pulse it |
 | `ripple` | concentric rings breathing out from the middle | bass hits push the rings outward; overall loudness sets the brightness |
 
 ```bash
@@ -95,13 +96,20 @@ These knobs work with every effect:
 
 | Option | What it does | Default |
 |---|---|---|
-| `--mode colorful` | rainbow colors across the keyboard | ✔ default |
+| `--mode colorful` | a 4-color gradient (red → violet → cyan → amber) scrolling across the board | ✔ default |
 | `--mode single --color ff2000` | one color of your choice | |
 | `--gain 1.5` | amplitude multiplier — bigger number = wilder reaction. Try `0.5`–`3` | `1.0` |
 | `--smooth 2` | smoothness multiplier — bigger = silkier, slower motion; smaller = twitchy and snappy. Try `0.5`–`3` | `1.0` |
-| `--scroll 0.3` | how fast the rainbow drifts across the keys, in cycles per second. `0` freezes the color in place (`vortex` ignores this — it spins on its own) | `0.15` |
+| `--scroll 0.3` | how fast the gradient drifts across the keys, in cycles per second. `0` freezes it in place (`vortex` ignores this — it spins on its own) | `0.15` |
 | `--radius 0.45` | **`vortex` only** — size of the dark hole in the middle (`0`–`1`). Bigger = wider void, ring pushed further out | `0.18` |
 | `--fps 60` | frames per second. Default 30 looks smooth and is light on CPU; raise it up to ~60 (the board's ceiling) for silkier motion | `30` |
+
+> **The default palette** is `#FF4242` · `#7C3AED` · `#06B6D4` · `#EAB308`
+> — a soft red, violet, cyan and amber. They're deliberately more **pastel**
+> than the harsh, full-saturation RGB the keyboard blasts on its own; the
+> result is easier on the eyes and just looks nicer. (Prefer the loud stuff?
+> `--mode single --color <hex>` or the standalone `rainbow` command still give
+> you full-saturation colors.)
 
 Examples:
 
@@ -117,6 +125,24 @@ dynamics, and `--gain` scales on top of that.
 
 > `--shape` is the old name for `--effect` and still works, so any older
 > commands you have keep running.
+
+### When the music stops (`--default`)
+
+Leave the visualizer running all day and it won't sit on a dead black board
+during quiet moments. After **5 seconds** of silence it smoothly crossfades
+into an ambient, non-audio effect; the instant sound returns it fades right
+back to reacting. Both transitions are gentle — no jarring cuts.
+
+| Option | What it does | Default |
+|---|---|---|
+| `--default gradient` | the idle effect: `gradient` (the scrolling 4-color gradient), `breathe` (whole board drifting through the palette), `wave` (a rolling brightness wave), or `off` (go dark) | `gradient` |
+| `--idle-gap 3` | seconds of silence before it switches over | `5` |
+| `--silence-level 0.01` | how quiet counts as "silence" — raise it if a noisy line keeps it awake, lower it if quiet passages trip it | `0.004` |
+
+```bash
+python3 hydra_rgb.py audio --default breathe            # breathe softly when idle
+python3 hydra_rgb.py audio --default off --idle-gap 2   # just go dark after 2s of quiet
+```
 
 ### Other commands
 
@@ -145,7 +171,7 @@ Copy-paste any of these. Press **Ctrl-C** to stop.
 # ⭐ the black hole — wide dark void, extra punchy
 python3 hydra_rgb.py audio --effect vortex --radius 0.4 --gain 1.5
 
-# neon black hole — hot-pink accretion ring, no rainbow
+# neon black hole — hot-pink ring, single color instead of the gradient
 python3 hydra_rgb.py audio --effect vortex --mode single --color ff0055
 
 # bass ripples breathing out from the center
@@ -157,11 +183,17 @@ python3 hydra_rgb.py audio --effect bars --smooth 0.5 --gain 2
 # dreamy chill wave — slow, silky, barely-drifting colors
 python3 hydra_rgb.py audio --effect wave --smooth 2.5 --scroll 0.05
 
-# rave mode — fast rainbow ripping across the keys
+# rave mode — fast gradient ripping across the keys
 python3 hydra_rgb.py audio --scroll 0.6 --gain 1.5
 
 # cyberpunk cyan rings
 python3 hydra_rgb.py audio --effect ripple --mode single --color 00ffcc
+
+# leave it on all day — reacts to music, breathes the gradient when it's quiet
+python3 hydra_rgb.py audio --default breathe
+
+# party then chill — punchy bars that melt into a slow gradient after 3s of quiet
+python3 hydra_rgb.py audio --effect bars --gain 1.8 --default gradient --idle-gap 3
 ```
 
 ### 🌈 Ambient (no music needed)
@@ -179,12 +211,22 @@ python3 hydra_rgb.py key w ff2200 a ff2200 s ff2200 d ff2200   # gamer WASD
 - **`--gain`** = intensity. `0.5` = subtle, `2`+ = wild.
 - **`--smooth`** = personality. Low (`0.4`) = twitchy and snappy; high
   (`2.5`) = liquid and dreamy.
-- **`--scroll`** = how fast the rainbow drifts. `0` freezes the color,
+- **`--scroll`** = how fast the gradient drifts. `0` freezes it,
   `0.6` is a full-on rave.
 
 Mix them freely with any `--effect` (`wave`/`bars`/`vortex`/`ripple`) and
 `--mode single --color <hex>`. Start with the ⭐ vortex — with a bass-heavy
 track it looks the best.
+
+## 🖥️ Web UI (optional)
+
+There's also a small browser app under `client/`. Its real purpose is
+**piping shader/canvas effects to the keyboard**: it runs GPU shader
+components (React Bits backgrounds like Strands, Color Bends, Dark Veil, plus
+a built-in gradient lab), grabs each rendered frame off the `<canvas>`,
+downscales it to the 16×5 board, and streams it over a local WebSocket. The
+CLI above is all you need day to day — this is just for driving the board
+from arbitrary visuals. Details in [client/README.md](client/README.md).
 
 ## Troubleshooting
 
