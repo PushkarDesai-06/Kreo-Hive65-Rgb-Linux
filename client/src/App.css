@@ -71,7 +71,51 @@ input[type="color"] {
 }
 
 footer {
-  display: flex; gap: 20px; margin-top: 14px;
+  display: flex; gap: 20px; margin-top: 14px; align-items: center; flex-wrap: wrap;
   color: #8b93a7; font-size: 12px; font-variant-numeric: tabular-nums;
 }
 footer b { color: #cfe0ff; }
+footer .ctl { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+footer .status { gap: 8px; }
+
+/* tabs */
+.tabs { display: flex; gap: 8px; }
+.tabs button {
+  background: #1b2030; border: 1px solid #2b3145; color: #e6e8ee;
+  border-radius: 8px; padding: 7px 14px; font: inherit; cursor: pointer;
+}
+.tabs button:hover { border-color: #3a4568; background: #222840; }
+.tabs button.on { background: #2b6cff33; border-color: #6ea8ff; color: #cfe0ff; }
+
+/* canvas -> keyboard bridge */
+.sub { color: #8b93a7; font-size: 12px; margin-bottom: 6px; }
+.bridge-top { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+.bridge-right { flex: 1; min-width: 320px; }
+.stage {
+  border-radius: 10px; overflow: hidden; border: 1px solid #232838;
+  background: #000;
+}
+.stage > * { width: 100%; height: 100%; }
+
+/* parameter controls */
+.controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px 20px;
+}
+.control { display: flex; align-items: center; gap: 8px; color: #b9c0d2; font-size: 12px; }
+.control .clabel { min-width: 78px; text-transform: capitalize; }
+.control input[type="range"] { flex: 1; accent-color: #6ea8ff; min-width: 60px; }
+.control b { color: #cfe0ff; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.control.bool { text-transform: capitalize; gap: 6px; }
+.control.colors .swatches { display: flex; gap: 4px; }
+.control.colors input[type="color"] { width: 26px; height: 24px; border: none; background: none; padding: 0; cursor: pointer; }
+.control.select { align-items: center; }
+.control.select .segbtns { display: flex; gap: 4px; flex-wrap: wrap; }
+.control.select .segbtns button {
+  background: #1b2030; border: 1px solid #2b3145; color: #b9c0d2;
+  border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer;
+  text-transform: capitalize;
+}
+.control.select .segbtns button:hover { border-color: #3a4568; }
+.control.select .segbtns button.on { background: #2b6cff33; border-color: #6ea8ff; color: #cfe0ff; }

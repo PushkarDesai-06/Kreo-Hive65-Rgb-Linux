@@ -21,7 +21,7 @@ Usage:
   its onboard lighting once streaming stops, so the tool holds the frame by
   re-sending it. Add --once to set a single frame and exit (for scripts).
   hydra_rgb.py audio [options]             # audio-reactive spectrum wave
-      --mode colorful|single   coloring (default colorful rainbow)
+      --mode colorful|single   coloring (default colorful = 4-color gradient)
       --color RRGGBB           color for single mode (default 009bde)
       --gain FLOAT             amplitude multiplier (default 1.0)
       --smooth FLOAT           smoothness multiplier (default 1.0)
@@ -34,6 +34,12 @@ Usage:
                                ripple= rings pushed outward by bass
                                (--shape is a backward-compatible alias)
       --radius FLOAT           vortex event-horizon (hole) size 0..1 (0.18)
+      --default NAME           non-audio effect shown when music is silent:
+                               gradient(default)|breathe|wave|off. After
+                               --idle-gap secs of silence it crossfades in;
+                               sound returning fades back to audio instantly.
+      --idle-gap SEC           silence before switching to --default (5.0)
+      --silence-level FLOAT    peak below this = silence (0.004; tune per system)
       --fps N --source NAME --duration SEC --debug
     Captures system sound from the default sink's monitor via parec
     (PipeWire/PulseAudio); override with --source (see: pactl list short
@@ -146,7 +152,7 @@ MAXCOL = 15
 # angle from the board's center. Columns/rows are each scaled to roughly
 # [-1, 1] so a "circle" fills the wide 16x5 grid. Precomputed once.
 TAU = 2.0 * math.pi
-_CX, _CY = MAXCOL / 2.0, (ROWS - 1) / 2.0  # center at col 7.5, row 2
+_CX, _CY = (MAXCOL / 2.0) - 2, (ROWS - 1) / 2.0  # center at col 7.5, row 2
 _XN, _YN = MAXCOL / 2.0 + 0.5, (ROWS - 1) / 2.0 + 0.5
 GEOM = {
     name: (
@@ -168,9 +174,9 @@ RING_GAP = 0.28  # accretion ring sits this far outside the hole
 RING_PUSH = 0.22  # bass shoves the ring further out (beat ripple)
 RING_W = 0.16  # accretion-ring thickness (gaussian sigma)
 # ripple: concentric rings pushed outward by bass hits
-RIPPLE_RINGS = 2.5
-RIPPLE_BASE = 0.15  # idle ring cycles/sec
-RIPPLE_SPEED = 1.2  # extra cycles/sec driven by bass
+RIPPLE_RINGS = 1
+RIPPLE_BASE = 0.05  # idle ring cycles/sec
+RIPPLE_SPEED = 0.8  # extra cycles/sec driven by bass
 
 
 def find_device():
@@ -256,6 +262,26 @@ def hsv(h, s=1.0, v=1.0):
     p, q, t = v * (1 - s), v * (1 - f * s), v * (1 - (1 - f) * s)
     r, g, b = [(v, t, p), (q, v, p), (p, v, t), (p, q, v), (t, p, v), (v, p, q)][i]
     return int(r * 255), int(g * 255), int(b * 255)
+
+
+# "colorful" mode palette — the Gradient Lab default (red / violet / cyan / amber)
+COLORFUL_PALETTE = [
+    (0xFF, 0x42, 0x42),
+    (0x7C, 0x3A, 0xED),
+    (0x06, 0xB6, 0xD4),
+    (0xEA, 0xB3, 0x08),
+]
+
+
+def palette_at(u, v=1.0, palette=COLORFUL_PALETTE):
+    """Sample a looping gradient of `palette` at position u (wraps), scaled by
+    brightness v. Mirrors the web Gradient Lab's palAt so colorful mode matches."""
+    n = len(palette)
+    x = ((u % 1.0) + 1.0) % 1.0 * n
+    i = int(x) % n
+    f = x - int(x)
+    a, b = palette[i], palette[(i + 1) % n]
+    return tuple(int((a[c] + (b[c] - a[c]) * f) * v) for c in range(3))
 
 
 def default_monitor():
@@ -394,6 +420,21 @@ def cell_coverage(level, row, shape):
     return min(1.0, max(0.0, half - (d - 0.5)))
 
 
+def idle_color(effect, col, row, ncols, t):
+    """Non-audio 'default' effect shown when music is silent — uses the same
+    COLORFUL_PALETTE as colorful mode. `t` is elapsed seconds."""
+    if effect == "off":
+        return (0, 0, 0)
+    if effect == "breathe":  # whole board drifts through the palette, breathing
+        v = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(t * 1.2))
+        return palette_at(t * 0.05, v=v)
+    if effect == "wave":  # palette gradient with a brightness wave rolling across
+        vv = 0.5 + 0.5 * math.sin(col * 0.55 - t * 2.2)
+        return palette_at(col / ncols - t * 0.08, v=0.35 + 0.65 * vv)
+    # gradient (default): the Gradient Lab look — palette scrolling across columns
+    return palette_at(col / ncols - t * 0.08)
+
+
 def run_audio(k, argv):
     p = argparse.ArgumentParser(
         prog="hydra_rgb.py audio", description="audio-reactive spectrum wave"
@@ -427,6 +468,26 @@ def run_audio(k, argv):
     p.add_argument("--rate", type=int, default=48000)
     p.add_argument("--source", default=None, help="pulse source name, or - for stdin")
     p.add_argument("--duration", type=float, default=None, help="stop after N seconds")
+    p.add_argument(
+        "--default",
+        choices=["gradient", "breathe", "wave", "off"],
+        default="gradient",
+        help="non-audio effect to crossfade to when music is silent",
+    )
+    p.add_argument(
+        "--idle-gap",
+        dest="idle_gap",
+        type=float,
+        default=5.0,
+        help="seconds of silence before switching to the --default effect",
+    )
+    p.add_argument(
+        "--silence-level",
+        dest="silence_level",
+        type=float,
+        default=0.004,
+        help="audio peak below this counts as silence (tune per system)",
+    )
     p.add_argument("--debug", action="store_true")
     o = p.parse_args(argv)
 
@@ -437,7 +498,8 @@ def run_audio(k, argv):
     base = parse_hex(o.color)
     print(
         f"audio-reactive: source={tap.source} mode={o.mode} effect={o.effect} "
-        f"gain={o.gain} smooth={o.smooth} fps={o.fps:g}"
+        f"gain={o.gain} smooth={o.smooth} fps={o.fps:g} "
+        f"default={o.default} idle-gap={o.idle_gap:g}s"
     )
 
     smooth = max(o.smooth, 0.05)
@@ -450,7 +512,11 @@ def run_audio(k, argv):
     raw = [0.0] * ncols
     rot_phase = 0.0  # accumulated vortex rotation (revolutions)
     ring_phase = 0.0  # accumulated ripple travel (ring cycles)
+    # idle<->audio crossfade: mix 0 = idle (default effect), 1 = audio-reactive
+    mix = 0.0  # start on the idle effect; fade up when music begins
+    TAU_UP, TAU_DOWN = 0.30, 0.90  # crossfade time constants (up = snappier)
     t0 = time.monotonic()
+    last_sound_t = t0 - o.idle_gap - 1.0  # treat startup as already-silent
     frames = 0
     try:
         while o.duration is None or time.monotonic() - t0 < o.duration:
@@ -474,6 +540,15 @@ def run_audio(k, argv):
             ]
             # per-frame audio features driving the 2D field effects
             t = tstart - t0
+            # idle/audio crossfade: any sound refreshes the timer and keeps us
+            # in audio; only after idle_gap seconds of silence do we ease over
+            # to the --default effect. Sound returning snaps target back to
+            # audio at once, but the mix still eases (no hard cuts either way).
+            if max(raw) > o.silence_level:
+                last_sound_t = tstart
+            m_target = 1.0 if (tstart - last_sound_t) < o.idle_gap else 0.0
+            tau = TAU_UP if m_target > mix else TAU_DOWN
+            mix += (m_target - mix) * (1.0 - math.exp(-frame_dt / tau))
             energy = sum(levels) / ncols
             bass = (levels[0] + levels[1] + levels[2] + levels[3]) / 4.0
             hole = ring = 0.0
@@ -503,14 +578,24 @@ def run_audio(k, argv):
                     core = max(0.0, 1.0 - rad * 1.8) * bass
                     val = min(1.0, ring * (0.12 + 0.88 * energy) + core)
                     hue = rad - o.scroll * t
-                else:  # wave / bars: column spectrum, scrolling rainbow
+                else:  # wave / bars: column spectrum, scrolling gradient
                     val = cell_coverage(disp[col], row, o.effect)
                     hue = col / ncols - o.scroll * t
 
                 if o.mode == "colorful":
-                    k.set_key(name, *hsv(hue % 1.0, v=val))
+                    a_rgb = palette_at(hue, v=val)
                 else:
-                    k.set_key(name, *(int(c * val) for c in base))
+                    a_rgb = (int(base[0] * val), int(base[1] * val), int(base[2] * val))
+                if mix >= 0.999:  # fully audio
+                    k.set_key(name, *a_rgb)
+                else:  # crossfade toward the idle default effect
+                    ir, ig, ib = idle_color(o.default, col, row, ncols, t)
+                    k.set_key(
+                        name,
+                        int(ir + (a_rgb[0] - ir) * mix),
+                        int(ig + (a_rgb[1] - ig) * mix),
+                        int(ib + (a_rgb[2] - ib) * mix),
+                    )
             tflush = time.monotonic()
             try:
                 k.flush()
@@ -524,8 +609,9 @@ def run_audio(k, argv):
             frames += 1
             if o.debug and frames % int(o.fps) == 0:
                 now = time.monotonic()
+                state = "audio" if mix > 0.5 else o.default
                 print(
-                    f"peak={max(raw):.5f} ref={ref:.5f} "
+                    f"peak={max(raw):.5f} mix={mix:.2f}({state}) "
                     f"levels[max]={max(levels):.2f} frame={(now - tstart) * 1000:.1f}ms "
                     f"(fft={t_fft * 1000:.1f} flush={(now - tflush) * 1000:.1f}) "
                     f"drained={tap.drained}B"

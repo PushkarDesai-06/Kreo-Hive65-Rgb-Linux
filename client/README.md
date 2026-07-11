@@ -39,11 +39,30 @@ bun install      # or npm install
 bun run dev      # http://localhost:5173  (start the WS server first)
 ```
 
-`src/App.jsx` is a full visualizer — effect selector (rainbow / wave / plasma /
-solid / off), color, speed, brightness, a **Max FPS** slider (default 30, since
-the board is flaky near 60), a live on-screen mirror of all 68 keys, and
-connection status. The hook + client live in `src/hooks/`
-(`useKeyboard.ts`, `keyboardClient.ts`, `keyboardLayout.ts`).
+`src/App.jsx` has two tabs:
+
+- **React Bits → Keyboard** — the canvas pipeline. Renders a canvas-producing
+  component live, samples its `<canvas>`, downscales it to 16×5, and streams to
+  the board. Pick a component (Strands / Color Bends), tweak its own props via
+  the generated controls, and watch the on-screen mirror. Adding a component is
+  one entry in `src/components/reactBitsRegistry.js` — see "React Bits pipeline"
+  below.
+- **Built-in Effects** — the hand-written visualizer (rainbow / wave / plasma /
+  solid / off) with color, speed, brightness, Max-FPS.
+
+Both cap sends with a **Max FPS** slider (default 30, since the board is flaky
+near 60) and show a live mirror of all 68 keys. The hook + client + layout live
+in `src/hooks/` (`useKeyboard.ts`, `keyboardClient.ts`, `keyboardLayout.ts`).
+
+### React Bits pipeline (`src/components/`)
+
+`CanvasKeyboardBridge.jsx` is the reusable core: wrap any component that draws a
+`<canvas>`, and it downscales that canvas to the board every frame. To add a
+React Bits component: drop its file in `src/components/`, and if it's WebGL
+(`ogl`/`three`) add `preserveDrawingBuffer: true` to its renderer options — the
+pixels are otherwise cleared after compositing and sample as black. Then add a
+descriptor (component + default props + control list) to `reactBitsRegistry.js`;
+`ParamControls.jsx` renders its controls automatically.
 
 ## 3. …or drop the client into your own React app
 
