@@ -49,6 +49,7 @@ def cmd_get(dev, rid, length):
 def cmd_snap(dev, name):
     fd = os.open(dev, os.O_RDWR)
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'snapshots', name + '.bin')
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     try:
         blobs = []
         for rid, ln in ((5, 5), (6, 519)):

@@ -21,7 +21,7 @@ board, like the Portronics Hydra 10).
 
 ## Setup (one time, ~2 minutes)
 
-**1. Get the files.** Put `hydra_rgb.py` and `60-hydra-rgb.rules` in a
+**1. Get the files.** Put `keyboardrgb.py` and `60-keyboardrgb.rules` in a
 folder, e.g. `~/kbd-re`, and open a terminal there.
 
 **2. Give yourself permission to talk to the keyboard.** Out of the box,
@@ -31,7 +31,7 @@ specific keyboard" — it's scoped to this one device and easy to undo
 (just delete the file):
 
 ```bash
-sudo cp 60-hydra-rgb.rules /etc/udev/rules.d/
+sudo cp 60-keyboardrgb.rules /etc/udev/rules.d/
 sudo udevadm control --reload
 ```
 
@@ -45,9 +45,9 @@ takes effect.
 **3. Try it:**
 
 ```bash
-python3 hydra_rgb.py color ff0000     # whole board red (Ctrl-C to stop)
-python3 hydra_rgb.py rainbow          # rainbow across the keys
-python3 hydra_rgb.py off              # everything off
+python3 keyboardrgb.py color ff0000     # whole board red (Ctrl-C to stop)
+python3 keyboardrgb.py rainbow          # rainbow across the keys
+python3 keyboardrgb.py off              # everything off
 ```
 
 If the board turned red, you're done. If you got `Permission denied`, see
@@ -58,13 +58,13 @@ Troubleshooting below.
 > purpose — the keyboard snaps back to its own built-in lighting the moment
 > the program stops, so the tool stays alive to hold your colors in place.
 > If you'd rather set a color and have the command exit right away (e.g.
-> from a startup script), add `--once`: `python3 hydra_rgb.py color ff0000
+> from a startup script), add `--once`: `python3 keyboardrgb.py color ff0000
 > --once`.
 
 ## 🎵 Audio-reactive mode
 
 ```bash
-python3 hydra_rgb.py audio
+python3 keyboardrgb.py audio
 ```
 
 That's it — play some music. The keyboard becomes a 16-column spectrum
@@ -85,9 +85,9 @@ Pick the visual style. All four react to your audio in real time:
 | `ripple` | concentric rings breathing out from the middle | bass hits push the rings outward; overall loudness sets the brightness |
 
 ```bash
-python3 hydra_rgb.py audio --effect vortex
-python3 hydra_rgb.py audio --effect ripple
-python3 hydra_rgb.py audio --effect bars
+python3 keyboardrgb.py audio --effect vortex
+python3 keyboardrgb.py audio --effect ripple
+python3 keyboardrgb.py audio --effect bars
 ```
 
 ### Make it yours
@@ -114,10 +114,10 @@ These knobs work with every effect:
 Examples:
 
 ```bash
-python3 hydra_rgb.py audio --effect vortex --radius 0.4         # black hole, wider void
-python3 hydra_rgb.py audio --effect ripple --mode single --color 00ffcc
-python3 hydra_rgb.py audio --mode single --color 00ffcc --smooth 2
-python3 hydra_rgb.py audio --effect bars --gain 1.5 --smooth 0.6
+python3 keyboardrgb.py audio --effect vortex --radius 0.4         # black hole, wider void
+python3 keyboardrgb.py audio --effect ripple --mode single --color 00ffcc
+python3 keyboardrgb.py audio --mode single --color 00ffcc --smooth 2
+python3 keyboardrgb.py audio --effect bars --gain 1.5 --smooth 0.6
 ```
 
 Volume doesn't matter — the visualizer auto-levels to the music's own
@@ -140,17 +140,17 @@ back to reacting. Both transitions are gentle — no jarring cuts.
 | `--silence-level 0.01` | how quiet counts as "silence" — raise it if a noisy line keeps it awake, lower it if quiet passages trip it | `0.004` |
 
 ```bash
-python3 hydra_rgb.py audio --default breathe            # breathe softly when idle
-python3 hydra_rgb.py audio --default off --idle-gap 2   # just go dark after 2s of quiet
+python3 keyboardrgb.py audio --default breathe            # breathe softly when idle
+python3 keyboardrgb.py audio --default off --idle-gap 2   # just go dark after 2s of quiet
 ```
 
 ### Other commands
 
 ```bash
-python3 hydra_rgb.py key w ff0000 a ff0000 s ff0000 d ff0000   # light up WASD
-python3 hydra_rgb.py gradient ff00ff 00ffff                    # left→right gradient
-python3 hydra_rgb.py wave                                      # rainbow animation, forever
-python3 hydra_rgb.py wave 30                                   # ...or just 30 seconds
+python3 keyboardrgb.py key w ff0000 a ff0000 s ff0000 d ff0000   # light up WASD
+python3 keyboardrgb.py gradient ff00ff 00ffff                    # left→right gradient
+python3 keyboardrgb.py wave                                      # rainbow animation, forever
+python3 keyboardrgb.py wave 30                                   # ...or just 30 seconds
 ```
 
 All of these hold until **Ctrl-C** (add `--once` to set one frame and exit).
@@ -169,41 +169,41 @@ Copy-paste any of these. Press **Ctrl-C** to stop.
 
 ```bash
 # ⭐ the black hole — wide dark void, extra punchy
-python3 hydra_rgb.py audio --effect vortex --radius 0.4 --gain 1.5
+python3 keyboardrgb.py audio --effect vortex --radius 0.4 --gain 1.5
 
 # neon black hole — hot-pink ring, single color instead of the gradient
-python3 hydra_rgb.py audio --effect vortex --mode single --color ff0055
+python3 keyboardrgb.py audio --effect vortex --mode single --color ff0055
 
 # bass ripples breathing out from the center
-python3 hydra_rgb.py audio --effect ripple --gain 1.4 --smooth 1.5
+python3 keyboardrgb.py audio --effect ripple --gain 1.4 --smooth 1.5
 
 # aggressive twitchy equalizer — snaps hard on every beat
-python3 hydra_rgb.py audio --effect bars --smooth 0.5 --gain 2
+python3 keyboardrgb.py audio --effect bars --smooth 0.5 --gain 2
 
 # dreamy chill wave — slow, silky, barely-drifting colors
-python3 hydra_rgb.py audio --effect wave --smooth 2.5 --scroll 0.05
+python3 keyboardrgb.py audio --effect wave --smooth 2.5 --scroll 0.05
 
 # rave mode — fast gradient ripping across the keys
-python3 hydra_rgb.py audio --scroll 0.6 --gain 1.5
+python3 keyboardrgb.py audio --scroll 0.6 --gain 1.5
 
 # cyberpunk cyan rings
-python3 hydra_rgb.py audio --effect ripple --mode single --color 00ffcc
+python3 keyboardrgb.py audio --effect ripple --mode single --color 00ffcc
 
 # leave it on all day — reacts to music, breathes the gradient when it's quiet
-python3 hydra_rgb.py audio --default breathe
+python3 keyboardrgb.py audio --default breathe
 
 # party then chill — punchy bars that melt into a slow gradient after 3s of quiet
-python3 hydra_rgb.py audio --effect bars --gain 1.8 --default gradient --idle-gap 3
+python3 keyboardrgb.py audio --effect bars --gain 1.8 --default gradient --idle-gap 3
 ```
 
 ### 🌈 Ambient (no music needed)
 
 ```bash
-python3 hydra_rgb.py wave                     # endless flowing rainbow
-python3 hydra_rgb.py gradient ff6a00 8a2be2   # sunset: orange → purple
-python3 hydra_rgb.py gradient 001b8a 00ffd5   # deep ocean: navy → aqua
-python3 hydra_rgb.py color 00ffaa             # solid neon mint
-python3 hydra_rgb.py key w ff2200 a ff2200 s ff2200 d ff2200   # gamer WASD
+python3 keyboardrgb.py wave                     # endless flowing rainbow
+python3 keyboardrgb.py gradient ff6a00 8a2be2   # sunset: orange → purple
+python3 keyboardrgb.py gradient 001b8a 00ffd5   # deep ocean: navy → aqua
+python3 keyboardrgb.py color 00ffaa             # solid neon mint
+python3 keyboardrgb.py key w ff2200 a ff2200 s ff2200 d ff2200   # gamer WASD
 ```
 
 ### The three knobs to play with
@@ -231,7 +231,7 @@ from arbitrary visuals. Details in [client/README.md](client/README.md).
 ## Troubleshooting
 
 **`Permission denied: /dev/hidrawX`** — the udev rule isn't active. Check
-that `/etc/udev/rules.d/60-hydra-rgb.rules` exists (with the `60-` name!),
+that `/etc/udev/rules.d/60-keyboardrgb.rules` exists (with the `60-` name!),
 run `sudo udevadm control --reload`, then unplug/replug the keyboard.
 
 **`keyboard vendor interface not found`** — the keyboard isn't connected
@@ -244,7 +244,7 @@ different output than the one being monitored. List your outputs with
 actually listening on:
 
 ```bash
-python3 hydra_rgb.py audio --source alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
+python3 keyboardrgb.py audio --source alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
 ```
 
 **My colors vanished / the keyboard went back to its own lighting** — the
@@ -257,7 +257,7 @@ just stop the tool or press your Fn lighting hotkey.
 **It says "keyboard dropped off the bus, reconnecting..."** — the board's
 firmware reset and re-enumerated; the tool waits for it to come back (~1 s)
 and carries on, so it's harmless. The usual cause is **two programs driving
-the keyboard at once** (e.g. another `hydra_rgb.py` still running in another
+the keyboard at once** (e.g. another `keyboardrgb.py` still running in another
 terminal) — make sure only one is streaming. It can also just happen
 occasionally on its own during long sessions.
 
@@ -272,7 +272,7 @@ occasionally on its own during long sessions.
   version: one 520-byte USB "feature report" per frame carries an RGB
   triplet for every key; the audio mode adds a pure-Python FFT that folds
   system audio into 16 frequency bands, one per keyboard column.
-- **Don't** use `hydra_rgb.py raw` to experiment with report `0x05` unless
+- **Don't** use `keyboardrgb.py raw` to experiment with report `0x05` unless
   you know what you're doing — that's the door to the chip's firmware
   bootloader on this hardware family, and wrong bytes could soft-brick the
   board.

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Byte-identity gate for the profile refactor.
 
-Drives hydra_rgb's real CLI effects (color/gradient/rainbow/wave/audio) with the
+Drives keyboardrgb's real CLI effects (color/gradient/rainbow/wave/audio) with the
 device, ioctl, clock and audio capture monkeypatched, and hashes the exact packet
 each effect would SET_FEATURE to the board. Run with --save to snapshot the
 current code as the baseline; run with no args to assert nothing changed.
 
-    ./verify_golden.py --save    # snapshot baseline (do this BEFORE refactoring)
-    ./verify_golden.py           # fail if any effect's frame bytes changed
+    ./tests/verify_golden.py --save    # snapshot baseline (before a refactor)
+    ./tests/verify_golden.py           # fail if any effect's frame bytes changed
 
 No hardware, no PulseAudio, fully deterministic (clock pinned, synthetic audio).
 """
@@ -19,7 +19,8 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASELINE = os.path.join(HERE, "tests", "golden_frames.json")
+sys.path.insert(0, os.path.dirname(HERE))  # import the package modules from repo root
+BASELINE = os.path.join(HERE, "golden_frames.json")
 
 # --- a fake hidraw node both the old and new find_device() will discover ------
 # Old find_device: substring "V0000258AP0000010C" in uppercased uevent + b"\x85\x06"
@@ -53,14 +54,19 @@ class _StopClock(Exception):
     pass
 
 
-def install(hydra):
-    """Monkeypatch the module for deterministic, hardware-free capture."""
+def install():
+    """Monkeypatch the modules for deterministic, hardware-free capture. Patch
+    targets follow the post-split layout: find_device lives in device, AudioTap
+    is looked up in effects."""
     import fcntl
     import glob
     import time
 
+    import device
+    import effects
+
     glob.glob = lambda pat: [FAKE_NODE] if "hidraw" in pat else []
-    hydra.open = _fake_open           # shadows builtin open inside find_device
+    device.open = _fake_open          # shadows builtin open inside find_device
     fcntl.ioctl = _fake_ioctl
     time.monotonic = lambda: 1000.0   # pinned clock -> t == 0 everywhere
     time.time = lambda: 1000.0
@@ -79,15 +85,15 @@ def install(hydra):
         def close(self):
             pass
 
-    hydra.AudioTap = FakeTap
+    effects.AudioTap = FakeTap
 
 
-def run_effect(hydra, argv):
+def run_effect(cli, argv):
     """Run one CLI invocation, return sha256 of its first emitted frame."""
     CAPTURED.clear()
-    sys.argv = ["hydra_rgb.py"] + argv
+    sys.argv = ["keyboardrgb.py"] + argv
     try:
-        hydra.main()
+        cli.main()
     except (KeyboardInterrupt, _StopClock):
         pass
     if not CAPTURED:
@@ -110,8 +116,8 @@ CASES = {
 
 def main():
     save = "--save" in sys.argv
-    import hydra_rgb
-    install(hydra_rgb)
+    install()
+    import keyboardrgb
     # silence the effects' own prints
     devnull = open(os.devnull, "w")
     real_stdout = sys.stdout
@@ -119,7 +125,7 @@ def main():
     for name, argv in CASES.items():
         sys.stdout = devnull
         try:
-            hashes[name] = run_effect(hydra_rgb, argv)
+            hashes[name] = run_effect(keyboardrgb, argv)
         finally:
             sys.stdout = real_stdout
 

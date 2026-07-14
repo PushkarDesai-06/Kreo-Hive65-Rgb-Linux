@@ -44,7 +44,7 @@ Packet layout (520 bytes, report ID included):
 - Stream frames at will (60 fps works; the reference plugin paces ~1 ms).
 - **The board reverts to its onboard lighting after host traffic stops** (an
   idle timeout of a few seconds), so a single frame does not persist. To hold
-  a static color, re-send it on an interval (`hydra_rgb.py` keeps ~1 Hz
+  a static color, re-send it on an interval (`keyboardrgb.py` keeps ~1 Hz
   keep-alives for its color/wave modes). Fn hotkeys also override at any time.
 - One SET_FEATURE takes ~11.6 ms on the wire (520 bytes over a full-speed
   EP0 = 9 × 64-byte data stages) — ~60 fps is the practical frame ceiling.
@@ -52,14 +52,14 @@ Packet layout (520 bytes, report ID included):
   resets and re-enumerates (observed once after ~3000 frames: EPROTO on the
   in-flight transfer, then ENODEV, back in ~1 s with a new devnum and
   root-owned hidraw nodes). Long-running drivers must reopen the device;
-  `hydra_rgb.py` does this automatically.
+  `keyboardrgb.py` does this automatically.
 
 ### LED slot map (68-key layout)
 
 `slot = column*6 + row + 1` — column-major, 6 slots per physical column,
 16 columns (0–15), rows top→bottom 0–4. Examples: Esc = col 0 row 0 → 1,
 Space = col 5 row 4 → 35, Right Arrow = col 15 row 4 → 96... (see
-`hydra_rgb.py` LAYOUT for the full name→slot table). Unused slots ignored.
+`profiles/hive65.json` for the full name→slot layout). Unused slots ignored.
 
 ### Readback quirk
 
@@ -78,29 +78,37 @@ directions.
 - **Deliberately not fuzzed**: SinoWealth keyboard MCUs enter their ISP
   (firmware flash) bootloader via a magic feature report on this family;
   blind writes risk soft-bricking. To map it, capture the vendor Windows
-  app in a VM with USB passthrough while running `usbmon_sniff.py` on the
-  host, then diff.
+  app in a VM with USB passthrough while running
+  `reverse-engineering/usbmon_sniff.py` on the host, then diff.
 
 ## Tools in this directory
 
-- `hydra_rgb.py` — the deliverable. `color/key/gradient/rainbow/wave/off/raw/
-  audio` subcommands, auto-detects the hidraw node, no dependencies. `audio`
-  is a system-sound visualizer: parec monitor capture -> pure-python 1024-pt
-  FFT -> 16 log-spaced bands (one per column) with auto-gain, `--mode
-  colorful|single`, `--effect wave|bars|vortex|ripple` (vortex/ripple are
-  2D field effects using the per-key GEOM angle/radius table), `--gain`,
-  `--smooth`, `--scroll`. `--shape` is a back-compat alias for `--effect`.
+- `keyboardrgb.py` — the CLI. `color/key/gradient/rainbow/wave/off/raw/audio/
+  walk` subcommands, auto-detects the hidraw node + profile, no dependencies.
+  `audio` is a system-sound visualizer: parec monitor capture -> pure-python
+  1024-pt FFT -> N log-spaced bands (one per column) with auto-gain, `--mode
+  colorful|single`, `--effect wave|bars|vortex|ripple` (vortex/ripple are 2D
+  field effects using the per-key geometry table), `--gain`, `--smooth`,
+  `--scroll`. `--shape` is a back-compat alias for `--effect`. It's a thin
+  dispatcher over the modules: `device.py` (discovery + the `Kbd` driver),
+  `effects.py` (renderers), `audio.py` (capture + FFT), `color.py` (color
+  math), and `kbd_profiles.py` + `profiles/*.json` (per-board identity /
+  protocol / layout). Adding a keyboard is a new JSON file — no code changes.
 - `kbd_ws_server.py` — zero-dep WebSocket bridge (RFC6455 on stdlib) that
   streams RGB frames from any app to the board via a coalescing latest-wins
   writer thread (~12 ms latency). Reuses the `Kbd` driver. Primary frame =
   binary 204 bytes (68 keys × RGB); also JSON keymap/grid/fill. Emits a
   TS client + `useKeyboard` hook + `schema.json` via `emit-client <dir>`
   (see `client/`).
-- `probe.py` — GET/SET feature-report probe, state snapshot + diff.
-- `usbmon_sniff.py` — dependency-free usbmon binary-interface sniffer
-  (decodes SET_REPORT/GET_REPORT control transfers): `usbmon_sniff.py <bus>
-  <devnum>`; needs read access to `/dev/usbmon<bus>`.
-- `60-hydra-rgb.rules` — udev rule granting the seated user access to the
+- `reverse-engineering/` — the tools used to derive this protocol; not needed
+  to *use* keyboardrgb (see its README):
+  - `probe.py` — GET/SET feature-report probe, state snapshot + diff.
+  - `usbmon_sniff.py` — dependency-free usbmon binary-interface sniffer
+    (decodes SET_REPORT/GET_REPORT control transfers): `usbmon_sniff.py <bus>
+    <devnum>`; needs read access to `/dev/usbmon<bus>`.
+  - `hydra0049.py` — report-6 probe for the Portronics Hydra 10 (258a:0049).
+  - `captures/` — saved usbmon logs from the sessions above.
+- `60-keyboardrgb.rules` — udev rule granting the seated user access to the
   keyboard's hidraw nodes (install to `/etc/udev/rules.d/`, then
   `udevadm control --reload && udevadm trigger`).
 

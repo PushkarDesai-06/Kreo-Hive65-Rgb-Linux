@@ -10,7 +10,7 @@ python3 kbd_ws_server.py            # ws://127.0.0.1:8787
 python3 kbd_ws_server.py --host 0.0.0.0 --port 9000   # expose to LAN / other port
 ```
 
-Zero dependencies (pure Python stdlib + the `hydra_rgb.py` driver). It reuses
+Zero dependencies (pure Python stdlib + the `device.py` driver). It reuses
 the same udev/permissions setup as the CLI — if you see `waiting for
 keyboard...`, grant hidraw access (see the main README's udev rule).
 

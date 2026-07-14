@@ -3,7 +3,7 @@
 (258a:010c) keyboard from any app (e.g. a React front-end).
 
 Zero dependencies — a minimal RFC6455 server on top of the `Kbd` driver in
-hydra_rgb.py. A single writer thread owns the keyboard and coalesces frames
+device.py. A single writer thread owns the keyboard and coalesces frames
 latest-wins, so sending faster than the board's ~60 fps ceiling never builds a
 queue — you always render the freshest frame. End-to-end latency ≈ the USB
 flush (~12 ms), not the socket.
@@ -34,24 +34,27 @@ import sys
 import threading
 import time
 
-import hydra_rgb as drv
+import color
+import device
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-NKEYS = len(drv.LAYOUT)
-RGB_BYTES = drv.NUM_SLOTS * 3
-GRID_COLS = drv.MAXCOL + 1
-GRID_ROWS = drv.ROWS
-GRID_TO_SLOT = {(col, row): drv.SLOT[name] for name, col, row in drv.LAYOUT}
+# the board this bridge serves (the driver's default profile)
+P = device.DEFAULT
+NKEYS = P.key_count()
+RGB_BYTES = P.num_slots * 3
+GRID_COLS = P.cols
+GRID_ROWS = P.rows
+GRID_TO_SLOT = {(col, row): P.slot[name] for name, col, row in P.keys_tuples}
 
 
 # ---------------------------------------------------------------- schema ----
 def build_schema():
     return {
         "type": "schema",
-        "device": "BY Tech / Kreo Hive 65 (258a:010c)",
+        "device": P.name,
         "grid": {"cols": GRID_COLS, "rows": GRID_ROWS},
         "keyCount": NKEYS,
-        "slotCount": drv.NUM_SLOTS,
+        "slotCount": P.num_slots,
         "maxFps": 60,
         "primaryFormat": "binary",
         "binaryFrame": {
@@ -60,11 +63,11 @@ def build_schema():
         },
         "rawFrame": {
             "bytes": RGB_BYTES,
-            "layout": "R,G,B per HID slot (%d slots)" % drv.NUM_SLOTS,
+            "layout": "R,G,B per HID slot (%d slots)" % P.num_slots,
         },
         "keys": [
-            {"index": i, "name": name, "col": col, "row": row, "slot": drv.SLOT[name]}
-            for i, (name, col, row) in enumerate(drv.LAYOUT)
+            {"index": i, "name": name, "col": col, "row": row, "slot": P.slot[name]}
+            for i, (name, col, row) in enumerate(P.keys_tuples)
         ],
     }
 
@@ -96,7 +99,7 @@ class Writer(threading.Thread):
         if self.kbd is not None:
             return True
         try:
-            self.kbd = drv.Kbd()
+            self.kbd = device.Kbd()
             print(f"[kbd] connected: {self.kbd.dev}", flush=True)
             self.connected = True
             return True
@@ -121,7 +124,7 @@ class Writer(threading.Thread):
                 if self.debug:
                     print(f"[kbd] flush #{self.flushes} first_key={bytes(self.pending[3:6]).hex()}", flush=True)
             except OSError as e:
-                if e.errno in drv.Kbd.GONE_ERRNOS:
+                if e.errno in device.Kbd.GONE_ERRNOS:
                     print("[kbd] firmware reset, reconnecting...", flush=True)
                     if not self.kbd.reopen():
                         self.kbd = None
@@ -135,7 +138,7 @@ class Writer(threading.Thread):
 def _color(v):
     """Accept '#rrggbb', 'rrggbb', or [r,g,b] -> (r,g,b)."""
     if isinstance(v, str):
-        return drv.parse_hex(v)
+        return color.parse_hex(v)
     return int(v[0]) & 255, int(v[1]) & 255, int(v[2]) & 255
 
 
@@ -143,8 +146,8 @@ def frame_from_binary(data):
     """204 bytes -> per-key; 378 bytes -> raw slot buffer."""
     rgb = bytearray(RGB_BYTES)
     if len(data) == NKEYS * 3:
-        for i, (name, _c, _r) in enumerate(drv.LAYOUT):
-            s = drv.SLOT[name] * 3
+        for i, (name, _c, _r) in enumerate(P.keys_tuples):
+            s = P.slot[name] * 3
             rgb[s : s + 3] = data[i * 3 : i * 3 + 3]
     elif len(data) == RGB_BYTES:
         rgb[:] = data
@@ -163,16 +166,16 @@ def frame_from_json(msg):
         return rgb, None
     if t == "fill":
         r, g, b = _color(msg["color"])
-        for name in drv.SLOT:
-            s = drv.SLOT[name] * 3
+        for name in P.slot:
+            s = P.slot[name] * 3
             rgb[s : s + 3] = bytes((r, g, b))
         return rgb, None
     if t == "frame":
         if "keys" in msg:
             for name, v in msg["keys"].items():
                 name = name.lower()
-                if name in drv.SLOT:
-                    s = drv.SLOT[name] * 3
+                if name in P.slot:
+                    s = P.slot[name] * 3
                     rgb[s : s + 3] = bytes(_color(v))
         elif "grid" in msg:
             for row, cols in enumerate(msg["grid"]):
@@ -182,7 +185,7 @@ def frame_from_json(msg):
                         rgb[slot * 3 : slot * 3 + 3] = bytes(_color(v))
         elif "rgb" in msg:  # flat list of 68 colors
             for i, v in enumerate(msg["rgb"][:NKEYS]):
-                s = drv.SLOT[drv.LAYOUT[i][0]] * 3
+                s = P.slot[P.keys_tuples[i][0]] * 3
                 rgb[s : s + 3] = bytes(_color(v))
         return rgb, None
     return None, {"type": "error", "message": f"unknown type {t!r}"}

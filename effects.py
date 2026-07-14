@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""Effect rendering: static effects (gradient / rainbow / wave) and the
+audio-reactive spectrum and 2D-field visualizers. Every effect reads its grid
+geometry from the active profile (`k.p`), so the same code scales to any board.
+
+Each render helper fills the Kbd frame buffer; the animated ones own their loop
+and re-send via device._flush (which rides out firmware resets)."""
+import argparse
+import math
+import time
+
+from audio import AudioTap, Spectrum
+from color import hsv, palette_at, parse_hex
+from device import Kbd, _flush
+
+TAU = 2.0 * math.pi
+# vortex: a black hole. A dark event horizon sits in the middle, ringed by a
+# bright accretion disk whose rainbow gradient rotates around it (faster when
+# louder). Bass swells the horizon and shoves the ring outward; each frequency
+# band lights up its own sector of the ring.
+VORTEX_BASE = 0.10  # idle color-rotation, revolutions/sec
+VORTEX_SPIN = 1.2  # extra rev/sec at full energy
+HOLE_SWELL = 0.18  # how much bass grows the event-horizon radius
+RING_GAP = 0.28  # accretion ring sits this far outside the hole
+RING_PUSH = 0.22  # bass shoves the ring further out (beat ripple)
+RING_W = 0.16  # accretion-ring thickness (gaussian sigma)
+# ripple: concentric rings pushed outward by bass hits
+RIPPLE_RINGS = 1
+RIPPLE_BASE = 0.05  # idle ring cycles/sec
+RIPPLE_SPEED = 0.8  # extra cycles/sec driven by bass
+
+
+def cell_coverage(level, row, rows, shape):
+    """Fraction [0..1] of a key at grid row 0(top)..rows-1(bottom) lit by a
+    column level in [0..1]. Scales to any row count (identical at rows=5)."""
+    if shape == "bars":  # grows bottom-up, `rows` tall
+        return min(1.0, max(0.0, level * rows - (rows - 1 - row)))
+    center = (rows - 1) / 2.0  # wave: mirrored around the middle row
+    d = abs(row - center)
+    half = level * (rows / 2.0)
+    if d < 0.5:
+        return min(1.0, half * 2)
+    return min(1.0, max(0.0, half - (d - 0.5)))
+
+
+def idle_color(effect, col, row, ncols, t):
+    """Non-audio 'default' effect shown when music is silent — uses the same
+    COLORFUL_PALETTE as colorful mode. `t` is elapsed seconds."""
+    if effect == "off":
+        return (0, 0, 0)
+    if effect == "breathe":  # whole board drifts through the palette, breathing
+        v = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(t * 1.2))
+        return palette_at(t * 0.05, v=v)
+    if effect == "wave":  # palette gradient with a brightness wave rolling across
+        vv = 0.5 + 0.5 * math.sin(col * 0.55 - t * 2.2)
+        return palette_at(col / ncols - t * 0.08, v=0.35 + 0.65 * vv)
+    # gradient (default): the Gradient Lab look — palette scrolling across columns
+    return palette_at(col / ncols - t * 0.08)
+
+
+def render_gradient(k, c1, c2):
+    """Left-to-right interpolation between two colors across the columns."""
+    denom = (k.p.cols - 1) or 1
+    for name, col, row in k.p.keys_tuples:
+        t = col / denom
+        k.set_key(name, *(int(x + (y - x) * t) for x, y in zip(c1, c2)))
+
+
+def render_rainbow(k):
+    """Static hue sweep across the columns."""
+    for name, col, row in k.p.keys_tuples:
+        k.set_key(name, *hsv(col / k.p.cols))
+
+
+def run_wave(k, dur):
+    """Animated hue wave rolling across the columns until Ctrl-C (or `dur` secs)."""
+    t0 = time.time()
+    try:
+        while dur is None or time.time() - t0 < dur:
+            ph = (time.time() - t0) * 0.4
+            for name, col, row in k.p.keys_tuples:
+                k.set_key(name, *hsv((col / k.p.cols + ph) % 1.0))
+            _flush(k)
+            time.sleep(1 / 60)
+    except KeyboardInterrupt:
+        pass
+
+
+def run_audio(k, argv):
+    p = argparse.ArgumentParser(
+        prog="keyboardrgb.py audio", description="audio-reactive spectrum wave"
+    )
+    p.add_argument("--mode", choices=["colorful", "single"], default="colorful")
+    p.add_argument("--color", default="009bde", help="color for single mode")
+    p.add_argument("--gain", type=float, default=1.0, help="amplitude multiplier")
+    p.add_argument("--smooth", type=float, default=1.0, help="smoothness multiplier")
+    p.add_argument(
+        "--effect",
+        "--shape",  # backward-compatible alias
+        dest="effect",
+        choices=["wave", "bars", "vortex", "ripple"],
+        default="wave",
+        help="wave/bars = spectrum shapes; vortex/ripple = 2D audio-reactive fields",
+    )
+    p.add_argument(
+        "--scroll",
+        type=float,
+        default=0.15,
+        help="colorful-mode gradient scroll speed, hue cycles/sec "
+        "left-to-right (0 = static); ignored by vortex (it spins on its own)",
+    )
+    p.add_argument(
+        "--radius",
+        type=float,
+        default=0.18,
+        help="vortex event-horizon (dark hole) radius, 0..1 (default 0.18)",
+    )
+    p.add_argument("--fps", type=float, default=30.0)
+    p.add_argument("--rate", type=int, default=48000)
+    p.add_argument("--source", default=None, help="pulse source name, or - for stdin")
+    p.add_argument("--duration", type=float, default=None, help="stop after N seconds")
+    p.add_argument(
+        "--default",
+        choices=["gradient", "breathe", "wave", "off"],
+        default="gradient",
+        help="non-audio effect to crossfade to when music is silent",
+    )
+    p.add_argument(
+        "--idle-gap",
+        dest="idle_gap",
+        type=float,
+        default=5.0,
+        help="seconds of silence before switching to the --default effect",
+    )
+    p.add_argument(
+        "--silence-level",
+        dest="silence_level",
+        type=float,
+        default=0.004,
+        help="audio peak below this counts as silence (tune per system)",
+    )
+    p.add_argument("--debug", action="store_true")
+    o = p.parse_args(argv)
+
+    ncols = k.p.cols
+    N = 1024
+    spec = Spectrum(N, o.rate, ncols)
+    tap = AudioTap(o.source, o.rate, N)
+    base = parse_hex(o.color)
+    print(
+        f"audio-reactive: source={tap.source} mode={o.mode} effect={o.effect} "
+        f"gain={o.gain} smooth={o.smooth} fps={o.fps:g} "
+        f"default={o.default} idle-gap={o.idle_gap:g}s"
+    )
+
+    smooth = max(o.smooth, 0.05)
+    frame_dt = 1.0 / o.fps
+    atk = math.exp(-frame_dt / (0.020 * smooth))
+    dec = math.exp(-frame_dt / (0.150 * smooth))
+    spatial = min(0.45, 0.15 * smooth)
+    ref, REF_DECAY, REF_FLOOR = 1e-3, 0.998, 2e-4  # slow auto-gain reference
+    levels = [0.0] * ncols
+    raw = [0.0] * ncols
+    rot_phase = 0.0  # accumulated vortex rotation (revolutions)
+    ring_phase = 0.0  # accumulated ripple travel (ring cycles)
+    # idle<->audio crossfade: mix 0 = idle (default effect), 1 = audio-reactive
+    mix = 0.0  # start on the idle effect; fade up when music begins
+    TAU_UP, TAU_DOWN = 0.30, 0.90  # crossfade time constants (up = snappier)
+    t0 = time.monotonic()
+    last_sound_t = t0 - o.idle_gap - 1.0  # treat startup as already-silent
+    frames = 0
+    try:
+        while o.duration is None or time.monotonic() - t0 < o.duration:
+            tstart = time.monotonic()
+            samples = tap.read()
+            t_fft = 0.0
+            if samples:
+                raw = spec.bands(samples)
+                t_fft = time.monotonic() - tstart
+            elif tap.eof:
+                raw = [0.0] * ncols
+            ref = max(ref * REF_DECAY, max(raw), REF_FLOOR)
+            for i in range(ncols):
+                target = min(1.0, (raw[i] / ref) ** 0.65 * o.gain)
+                coef = atk if target > levels[i] else dec
+                levels[i] = target + (levels[i] - target) * coef
+            disp = [
+                levels[i] * (1 - spatial)
+                + (levels[max(i - 1, 0)] + levels[min(i + 1, ncols - 1)]) * spatial / 2
+                for i in range(ncols)
+            ]
+            # per-frame audio features driving the 2D field effects
+            t = tstart - t0
+            # idle/audio crossfade: any sound refreshes the timer and keeps us
+            # in audio; only after idle_gap seconds of silence do we ease over
+            # to the --default effect. Sound returning snaps target back to
+            # audio at once, but the mix still eases (no hard cuts either way).
+            if max(raw) > o.silence_level:
+                last_sound_t = tstart
+            m_target = 1.0 if (tstart - last_sound_t) < o.idle_gap else 0.0
+            tau = TAU_UP if m_target > mix else TAU_DOWN
+            mix += (m_target - mix) * (1.0 - math.exp(-frame_dt / tau))
+            energy = sum(levels) / ncols
+            bass = (levels[0] + levels[1] + levels[2] + levels[3]) / 4.0
+            hole = ring = 0.0
+            if o.effect == "vortex":
+                rot_phase += (VORTEX_BASE + energy * VORTEX_SPIN) * frame_dt
+                hole = o.radius + bass * HOLE_SWELL  # event horizon breathes
+                ring = hole + RING_GAP + bass * RING_PUSH  # disk shoved out by bass
+            elif o.effect == "ripple":
+                ring_phase += (RIPPLE_BASE + bass * RIPPLE_SPEED) * frame_dt
+
+            for name, col, row in k.p.keys_tuples:
+                if o.effect == "vortex":
+                    nx, ny, rad, ang = k.p.geom[name]
+                    if rad < hole:
+                        val = 0.0  # inside the event horizon: dark void
+                    else:
+                        d = rad - ring
+                        shape = math.exp(-(d * d) / (2.0 * RING_W * RING_W))
+                        # each band lights its own angular sector of the ring
+                        bi = int((ang / TAU + 0.5) * ncols) % ncols
+                        val = shape * (0.12 + 0.88 * disp[bi])
+                    # rainbow wrapped around the ring; rot_phase spins it
+                    hue = ang / TAU + rot_phase + rad * 0.15
+                elif o.effect == "ripple":
+                    nx, ny, rad, ang = k.p.geom[name]
+                    ring = 0.5 + 0.5 * math.cos((rad * RIPPLE_RINGS - ring_phase) * TAU)
+                    core = max(0.0, 1.0 - rad * 1.8) * bass
+                    val = min(1.0, ring * (0.12 + 0.88 * energy) + core)
+                    hue = rad - o.scroll * t
+                else:  # wave / bars: column spectrum, scrolling gradient
+                    val = cell_coverage(disp[col], row, k.p.rows, o.effect)
+                    hue = col / ncols - o.scroll * t
+
+                if o.mode == "colorful":
+                    a_rgb = palette_at(hue, v=val)
+                else:
+                    a_rgb = (int(base[0] * val), int(base[1] * val), int(base[2] * val))
+                if mix >= 0.999:  # fully audio
+                    k.set_key(name, *a_rgb)
+                else:  # crossfade toward the idle default effect
+                    ir, ig, ib = idle_color(o.default, col, row, ncols, t)
+                    k.set_key(
+                        name,
+                        int(ir + (a_rgb[0] - ir) * mix),
+                        int(ig + (a_rgb[1] - ig) * mix),
+                        int(ib + (a_rgb[2] - ib) * mix),
+                    )
+            tflush = time.monotonic()
+            try:
+                k.flush()
+            except OSError as e:
+                if e.errno not in Kbd.GONE_ERRNOS:
+                    raise
+                print("keyboard dropped off the bus (firmware reset), reconnecting...")
+                if not k.reopen():
+                    raise SystemExit("reconnect failed")
+                print(f"reconnected: {k.dev}")
+            frames += 1
+            if o.debug and frames % int(o.fps) == 0:
+                now = time.monotonic()
+                state = "audio" if mix > 0.5 else o.default
+                print(
+                    f"peak={max(raw):.5f} mix={mix:.2f}({state}) "
+                    f"levels[max]={max(levels):.2f} frame={(now - tstart) * 1000:.1f}ms "
+                    f"(fft={t_fft * 1000:.1f} flush={(now - tflush) * 1000:.1f}) "
+                    f"drained={tap.drained}B"
+                )
+                tap.drained = 0
+            time.sleep(max(0.0, frame_dt - (time.monotonic() - tstart)))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        tap.close()
+        try:
+            k.clear()
+            k.flush()
+        except OSError:
+            pass
+    print(f"{frames} frames in {time.monotonic() - t0:.1f}s")

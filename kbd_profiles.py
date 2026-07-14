@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keyboard profiles for hydra_rgb — data-driven, stdlib-only.
+"""Keyboard profiles for keyboardrgb — data-driven, stdlib-only.
 
 A *profile* bundles the three things that vary between RGB keyboards:
 
@@ -26,6 +26,9 @@ import os
 Key = collections.namedtuple("Key", "name col row slot")
 
 PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiles")
+
+# board used when nothing is specified (autodetect falls back to this identity)
+DEFAULT_ID = "hive65"
 
 # report 5 is the SinoWealth ISP/command channel; never build a frame for it.
 FORBIDDEN_REPORT = 5

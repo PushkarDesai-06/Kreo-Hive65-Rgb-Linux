@@ -80,37 +80,37 @@ class TestProfiles(unittest.TestCase):
             kbd_profiles.Profile(bad)
 
     def test_find_device_selects_by_usb_id(self):
-        import hydra_rgb
+        import device
         # a Hydra 10 node should select the hydra10 profile, not hive65
         root = _make_sysfs("v0000258Ap00000049")
-        dev, prof = hydra_rgb.find_device(
+        dev, prof = device.find_device(
             list(self.profiles.values()), sysfs_root=root
         )
         self.assertEqual(prof.id, "hydra10")
         self.assertEqual(dev, "/dev/hidraw9")
         # a Hive 65 node selects hive65
         root2 = _make_sysfs("v0000258Ap0000010C")
-        _, prof2 = hydra_rgb.find_device(list(self.profiles.values()), sysfs_root=root2)
+        _, prof2 = device.find_device(list(self.profiles.values()), sysfs_root=root2)
         self.assertEqual(prof2.id, "hive65")
 
     def test_find_device_none_matches(self):
-        import hydra_rgb
+        import device
         root = _make_sysfs("v00001234p00005678")  # unknown board
         with self.assertRaises(SystemExit):
-            hydra_rgb.find_device(list(self.profiles.values()), sysfs_root=root)
+            device.find_device(list(self.profiles.values()), sysfs_root=root)
 
 
 class TestWsServerBackCompat(unittest.TestCase):
-    """kbd_ws_server reads drv.LAYOUT/SLOT/NUM_SLOTS/MAXCOL/ROWS — these aliases
-    must still resolve to the default (Hive 65) profile."""
+    """The WS server sources its board from device.DEFAULT (the default profile)
+    and must still describe the Hive 65."""
 
-    def test_aliases_present(self):
-        import hydra_rgb as drv
-        self.assertEqual(len(drv.LAYOUT), 68)
-        self.assertEqual(drv.NUM_SLOTS, 126)
-        self.assertEqual(drv.MAXCOL, 15)
-        self.assertEqual(drv.ROWS, 5)
-        self.assertEqual(drv.SLOT["esc"], 1)
+    def test_default_profile(self):
+        import device
+        p = device.DEFAULT
+        self.assertEqual(p.id, "hive65")
+        self.assertEqual(p.key_count(), 68)
+        self.assertEqual((p.cols, p.rows), (16, 5))
+        self.assertEqual(p.slot["esc"], 1)
 
     def test_ws_server_imports_and_builds_schema(self):
         import kbd_ws_server as ws
