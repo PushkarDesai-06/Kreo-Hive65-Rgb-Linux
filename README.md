@@ -64,6 +64,11 @@ to Troubleshooting below.
 
 ## Audio-reactive mode
 
+
+https://github.com/user-attachments/assets/8e475d93-be6e-4a3d-a416-4831388860dd
+
+The order of effect is wave -> bars -> wave
+
 ```bash
 python3 keyboardrgb.py audio
 ```
