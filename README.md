@@ -81,12 +81,14 @@ or headphones. Press Ctrl-C to stop.
 
 ### Effects (`--effect`)
 
-Pick the visual style you want. All four react to your audio in real time:
+Pick the visual style you want. They all react to your audio in real time:
 
 | Effect             | Looks like                                                                                 | Reacts to                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `wave` _(default)_ | a spectrum that swells out from the home row                                               | each column is one frequency band                                                                                                                                         |
-| `bars`             | a classic bottom-up equalizer                                                              | column height tracks band loudness                                                                                                                                        |
+| `bars`             | a classic equalizer — grows bottom-up by default; `--direction` picks the edge it grows from | column (or row) height tracks band loudness                                                                                                                             |
+| `split`            | bass glowing in from the left edge and treble from the right, fading to dark in the middle  | the left half brightens with bass, the right half with treble, so beats push in from the sides                                                                            |
+| `flow`             | a bass "waterfall" — the left column tracks the bass and each punch then travels across to the right     | only the leftmost column samples the bass; that reading scrolls rightward every frame, so a beat enters at the left and glides to the right edge (speed set by `--flow-speed`) |
 | `vortex`           | a black hole, with a dark void in the middle and a color accretion ring swirling around it | the colors spin faster the louder it gets, each frequency lights its own slice of the ring, and bass swells the hole and shoves the ring outward so beats give it a pulse |
 | `ripple`           | concentric rings breathing out from the middle                                             | bass hits push the rings outward, and overall loudness sets the brightness                                                                                                |
 
@@ -94,6 +96,28 @@ Pick the visual style you want. All four react to your audio in real time:
 python3 keyboardrgb.py audio --effect vortex
 python3 keyboardrgb.py audio --effect ripple
 python3 keyboardrgb.py audio --effect bars
+python3 keyboardrgb.py audio --effect split
+python3 keyboardrgb.py audio --effect flow
+```
+
+#### Bar direction (`--direction`)
+
+`bars` grows bottom-up by default. `--direction` (only meaningful for `bars`)
+changes which edge the bars grow from. `bottom`/`top` are vertical (one band per
+column); `left`/`right`/`sides` are horizontal (one band per row).
+
+| `--direction`      | The equalizer bars…                                    |
+| ------------------ | ------------------------------------------------------ |
+| `bottom` _(def.)_  | grow up from the bottom row                            |
+| `top`              | hang down from the top row                             |
+| `left`             | grow rightward from the left edge                      |
+| `right`            | grow leftward from the right edge                      |
+| `sides`            | grow inward from both edges and meet in the middle     |
+
+```bash
+python3 keyboardrgb.py audio --effect bars --direction top
+python3 keyboardrgb.py audio --effect bars --direction sides
+python3 keyboardrgb.py audio --effect bars --direction left --gain 1.5
 ```
 
 ### Make it yours
@@ -108,6 +132,7 @@ These knobs work with every effect:
 | `--smooth 2`                   | smoothness multiplier. Bigger is silkier and slower, smaller is twitchy and snappy. Try `0.5` to `3`                                         | `1.0`   |
 | `--scroll 0.3`                 | how fast the gradient drifts across the keys, in cycles per second. `0` freezes it in place (`vortex` ignores this one, it spins on its own) | `0.15`  |
 | `--radius 0.45`                | `vortex` only: size of the dark hole in the middle, from `0` to `1`. Bigger means a wider void and the ring pushed further out               | `0.18`  |
+| `--flow-speed 5`               | `flow` only: how fast a bass punch travels left-to-right, in columns per second. Lower is a slower, more visible sweep                        | `8.0`   |
 | `--fps 60`                     | frames per second. The default 30 looks smooth and stays light on the CPU; push it up toward 60 (the board's ceiling) for silkier motion     | `30`    |
 
 > About the default palette: it's `#FF4242`, `#7C3AED`, `#06B6D4` and
@@ -221,9 +246,9 @@ python3 keyboardrgb.py key w ff2200 a ff2200 s ff2200 d ff2200   # gamer WASD
 - `--scroll` is how fast the gradient drifts. `0` freezes it, `0.6` is a
   full-on rave.
 
-Mix them however you like with any `--effect` (`wave`, `bars`, `vortex`,
-`ripple`) and `--mode single --color <hex>`. Start with the vortex; on a
-bass-heavy track it looks the best.
+Mix them however you like with any `--effect` (`wave`, `bars`, `split`, `flow`,
+`vortex`, `ripple`) and `--mode single --color <hex>`. Start with the vortex;
+on a bass-heavy track it looks the best.
 
 ## Web UI (optional)
 

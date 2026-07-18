@@ -86,10 +86,15 @@ directions.
 - `keyboardrgb.py` — the CLI. `color/key/gradient/rainbow/wave/off/raw/audio/
   walk` subcommands, auto-detects the hidraw node + profile, no dependencies.
   `audio` is a system-sound visualizer: parec monitor capture -> pure-python
-  1024-pt FFT -> N log-spaced bands (one per column) with auto-gain, `--mode
-  colorful|single`, `--effect wave|bars|vortex|ripple` (vortex/ripple are 2D
-  field effects using the per-key geometry table), `--gain`, `--smooth`,
-  `--scroll`. `--shape` is a back-compat alias for `--effect`. It's a thin
+  1024-pt FFT -> N log-spaced bands (one per column, or one per row for
+  horizontal bars) with auto-gain, `--mode colorful|single`, `--effect
+  wave|bars|split|flow|vortex|ripple` (`bars` takes `--direction
+  bottom|top|left|right|sides`; split maps bass->left edge / treble->right edge;
+  flow is a bass waterfall — the left column samples the bass and that reading
+  scrolls right (speed via --flow-speed), so a punch travels left->right;
+  vortex/ripple are 2D field effects using the per-key geometry table),
+  `--gain`, `--smooth`, `--scroll`. `--shape` is a back-compat alias for
+  `--effect`. It's a thin
   dispatcher over the modules: `device.py` (discovery + the `Kbd` driver),
   `effects.py` (renderers), `audio.py` (capture + FFT), `color.py` (color
   math), and `kbd_profiles.py` + `profiles/*.json` (per-board identity /

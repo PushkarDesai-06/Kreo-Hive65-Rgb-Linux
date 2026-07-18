@@ -108,6 +108,12 @@ CASES = {
     "wave":          ["wave", "0.001"],  # dur>0 so it renders one frame then stops
     "audio-wave":    ["audio", "--effect", "wave", "--fps", "30"],
     "audio-bars":    ["audio", "--effect", "bars", "--fps", "30"],
+    "audio-bars-top":   ["audio", "--effect", "bars", "--direction", "top", "--fps", "30"],
+    "audio-bars-left":  ["audio", "--effect", "bars", "--direction", "left", "--fps", "30"],
+    "audio-bars-right": ["audio", "--effect", "bars", "--direction", "right", "--fps", "30"],
+    "audio-bars-sides": ["audio", "--effect", "bars", "--direction", "sides", "--fps", "30"],
+    "audio-split":   ["audio", "--effect", "split", "--fps", "30"],
+    "audio-flow":    ["audio", "--effect", "flow", "--fps", "30"],
     "audio-vortex":  ["audio", "--effect", "vortex", "--fps", "30"],
     "audio-ripple":  ["audio", "--effect", "ripple", "--fps", "30"],
     "audio-single":  ["audio", "--mode", "single", "--color", "00ff99", "--fps", "30"],

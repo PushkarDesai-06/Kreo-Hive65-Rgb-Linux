@@ -39,12 +39,21 @@ Usage:
       --scroll FLOAT           colorful gradient scroll speed in hue
                                cycles/sec, left-to-right; 0 = static (0.15)
       --effect NAME            wave  = center-out spectrum (default)
-                               bars  = bottom-up equalizer
+                               bars  = equalizer (see --direction for origin)
+                               split = bass grows from the left edge, treble
+                                       from the right, fading out in the middle
+                               flow  = the left column tracks the bass and
+                                       that punch travels left-to-right
+                                       (speed set by --flow-speed)
                                vortex= black hole: dark center, rainbow ring
                                        spinning around it (faster when loud)
                                ripple= rings pushed outward by bass
                                (--shape is a backward-compatible alias)
+      --direction NAME         bars only: edge the bars grow from —
+                               bottom(default)|top|left|right|sides
+                               (left/right/sides are horizontal, one band/row)
       --radius FLOAT           vortex event-horizon (hole) size 0..1 (0.18)
+      --flow-speed FLOAT       flow only: bass-punch travel speed, cols/sec (8.0)
       --default NAME           non-audio effect shown when music is silent:
                                gradient(default)|breathe|wave|off. After
                                --idle-gap secs of silence it crossfades in;
