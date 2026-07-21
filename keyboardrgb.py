@@ -8,8 +8,9 @@ different-sized keyboards. Adding a board is a new profiles/<id>.json file — n
 code changes. See kbd_profiles.py. The default board is the Kreo Hive 65
 (258a:010c): report 6, 520-byte frame, 68 keys, LED index = col*6 + row + 1.
 
-Modules: color (color math), audio (capture + FFT), device (discovery + Kbd
-driver), effects (renderers), kbd_profiles (profile loader). This file is the CLI.
+Modules: color (color math), audio (capture + FFT), screen (monitor capture),
+device (discovery + Kbd driver), effects (renderers), kbd_profiles (profile
+loader). This file is the CLI.
 
 Board selection (any subcommand):
   --profile NAME     force a specific profile (see --list-profiles)
@@ -64,6 +65,21 @@ Usage:
     Captures system sound from the default sink's monitor via parec
     (PipeWire/PulseAudio); override with --source (see: pactl list short
     sources), or --source - to pipe raw s16le mono PCM on stdin.
+  keyboardrgb.py screen [options]            # mirror a monitor onto the keys
+      --output NAME            monitor to capture (default: the focused one;
+                               see hyprctl monitors / wlr-randr)
+      --follow / --no-follow   track the focused monitor live (default: follow)
+      --res N                  capture height in px, the "144p" working res (144)
+      --blur FLOAT             blur radius in px at 144p, 0 = none (2.0)
+      --saturation FLOAT       saturation multiplier, 1 = faithful (1.5)
+      --gain FLOAT             brightness multiplier (1.1)
+      --gamma FLOAT            gamma, <1 brightens mid-tones (1.0)
+      --smooth FLOAT           temporal smoothing 0..0.95 (0.5)
+      --raw                    faithful colors (disable saturation/gain/gamma)
+      --fps N --duration SEC --debug
+    Grabs the display with grim (wlroots Wayland) or ffmpeg x11grab (X11),
+    downscales to 144p, blurs, and streams it to the keys. Needs ffmpeg (plus
+    grim on Wayland). Runs until Ctrl-C.
 
 Device node + profile autodetected from /sys/class/hidraw (USB id + report id).
 """
@@ -76,7 +92,7 @@ import time
 import kbd_profiles
 from color import parse_hex
 from device import Kbd, PROFILES, find_device, _flush, _match_node, hold
-from effects import render_gradient, render_rainbow, run_audio, run_wave
+from effects import render_gradient, render_rainbow, run_audio, run_screen, run_wave
 
 
 def run_walk(k, argv):
@@ -213,6 +229,8 @@ def main():
         run_wave(k, dur)
     elif cmd == "audio":
         run_audio(k, a[1:])
+    elif cmd == "screen":
+        run_screen(k, a[1:])
     elif cmd == "walk":
         run_walk(k, a[1:])
     elif cmd == "raw":

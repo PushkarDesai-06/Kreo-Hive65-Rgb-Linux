@@ -377,3 +377,121 @@ def run_audio(k, argv):
         except OSError:
             pass
     print(f"{frames} frames in {time.monotonic() - t0:.1f}s")
+
+
+def apply_look(rgb, sat, gain, gamma):
+    """Punch up a captured pixel for RGB LEDs: push saturation away from its
+    luma, optional gamma, then a brightness gain. sat=gain=gamma=1 is a no-op
+    (faithful). Returns a clamped 0..255 (r,g,b)."""
+    r, g, b = rgb
+    if sat != 1.0:
+        luma = 0.299 * r + 0.587 * g + 0.114 * b
+        r = luma + (r - luma) * sat
+        g = luma + (g - luma) * sat
+        b = luma + (b - luma) * sat
+    if gamma != 1.0:
+        inv = 1.0 / gamma
+        r = 255.0 * (max(0.0, r) / 255.0) ** inv
+        g = 255.0 * (max(0.0, g) / 255.0) ** inv
+        b = 255.0 * (max(0.0, b) / 255.0) ** inv
+    r, g, b = r * gain, g * gain, b * gain
+    return (
+        min(255, max(0, int(r))),
+        min(255, max(0, int(g))),
+        min(255, max(0, int(b))),
+    )
+
+
+def run_screen(k, argv):
+    """Mirror a monitor onto the keyboard: capture at 144p, blur, and stream it
+    to the keys. Follows the focused monitor by default (Hyprland). Held live by
+    re-sending each frame, so no separate keepalive is needed."""
+    from screen import ScreenTap
+
+    p = argparse.ArgumentParser(
+        prog="keyboardrgb.py screen",
+        description="mirror a monitor onto the keyboard (144p, blurred)",
+    )
+    p.add_argument("--output", default=None,
+                   help="monitor to capture (default: the focused one); "
+                        "see hyprctl monitors / wlr-randr")
+    p.add_argument("--follow", dest="follow", action="store_true", default=True,
+                   help="track the focused monitor (default)")
+    p.add_argument("--no-follow", dest="follow", action="store_false",
+                   help="pin to --output (or the current focus) instead")
+    p.add_argument("--fps", type=float, default=24.0, help="frames per second")
+    p.add_argument("--res", type=int, default=144,
+                   help="capture height in px — the '144p' working resolution")
+    p.add_argument("--blur", type=float, default=2.0,
+                   help="blur radius in px at 144p (0 = none)")
+    p.add_argument("--saturation", "--sat", dest="saturation", type=float,
+                   default=1.5, help="saturation multiplier (1 = faithful)")
+    p.add_argument("--gain", type=float, default=1.1,
+                   help="brightness multiplier")
+    p.add_argument("--gamma", type=float, default=1.0,
+                   help="gamma (<1 brightens mid-tones)")
+    p.add_argument("--smooth", type=float, default=0.5,
+                   help="temporal smoothing 0..0.95 (0 = none, higher = calmer)")
+    p.add_argument("--raw", action="store_true",
+                   help="faithful colors: disable saturation/gain/gamma")
+    p.add_argument("--duration", type=float, default=None,
+                   help="stop after N seconds")
+    p.add_argument("--debug", action="store_true")
+    o = p.parse_args(argv)
+
+    if o.output:  # an explicit monitor means don't chase focus
+        o.follow = False
+    sat = 1.0 if o.raw else o.saturation
+    gain = 1.0 if o.raw else o.gain
+    gamma = 1.0 if o.raw else o.gamma
+    ema = min(0.95, max(0.0, o.smooth))
+
+    tap = ScreenTap(o.output, o.follow, k.p.cols, k.p.rows,
+                    res=o.res, blur=o.blur, fps=o.fps)
+    # map each key to its cell in the row-major cols*rows grid (top-left origin)
+    key_cell = [(name, row * k.p.cols + col) for name, col, row in k.p.keys_tuples]
+    following = o.follow and tap.backend == "grim"
+    print(
+        f"screen sync: output={tap.output}{' (follow)' if following else ''} "
+        f"res={o.res}p blur={o.blur:g} fps={o.fps:g} sat={sat:g} gain={gain:g}"
+    )
+
+    frame_dt = 1.0 / o.fps if o.fps > 0 else 0.0
+    smoothed = None
+    t0 = time.monotonic()
+    frames = 0
+    try:
+        while o.duration is None or time.monotonic() - t0 < o.duration:
+            tstart = time.monotonic()
+            grid = tap.read()
+            if grid is not None:
+                if ema > 0.0:
+                    if smoothed is None:
+                        smoothed = [list(c) for c in grid]
+                    else:
+                        for i, c in enumerate(grid):
+                            s = smoothed[i]
+                            s[0] += (c[0] - s[0]) * (1 - ema)
+                            s[1] += (c[1] - s[1]) * (1 - ema)
+                            s[2] += (c[2] - s[2]) * (1 - ema)
+                    src = smoothed
+                else:
+                    src = grid
+                for name, cell in key_cell:
+                    k.set_key(name, *apply_look(src[cell], sat, gain, gamma))
+                _flush(k)
+                frames += 1
+                if o.debug and frames % max(1, int(o.fps)) == 0:
+                    print(f"output={tap.output} frame "
+                          f"{(time.monotonic() - tstart) * 1000:.1f}ms")
+            time.sleep(max(0.0, frame_dt - (time.monotonic() - tstart)))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        tap.close()
+        try:
+            k.clear()
+            k.flush()
+        except OSError:
+            pass
+    print(f"{frames} frames in {time.monotonic() - t0:.1f}s")

@@ -193,6 +193,45 @@ rshift lctrl rctrl lwin lalt ralt fn space enter backspace del home pgup
 pgdn up down left right minus equal lbracket rbracket backslash semicolon
 quote comma period slash`.
 
+## Screen sync
+
+Turn the keyboard into an ambient extension of your screen. It grabs your
+monitor, shrinks it to a blurry 144p, and paints that onto the keys — so the
+lighting glows with whatever colors are on screen (a bright game, a video, your
+wallpaper). It's a soft, low-res reflection, not a tiny display.
+
+```bash
+python3 keyboardrgb.py screen
+```
+
+By default it follows whichever monitor has focus and switches live as you move
+between them (on Hyprland). It's deliberately light: your display is captured
+with `grim`, and a single `ffmpeg` does the 144p downscale, blur, and squeeze
+down to the key grid, so Python barely does any work (a few hundred bytes per
+frame).
+
+You'll need `ffmpeg`, plus `grim` on Wayland (both are one package away on every
+distro). On X11 it uses `ffmpeg`'s `x11grab` instead and no `grim` is needed.
+
+Knobs:
+
+| Flag           | Does                                                                 |
+| -------------- | ------------------------------------------------------------------- |
+| `--output NAME`| pin one monitor instead of following focus (`hyprctl monitors` / `wlr-randr` lists names) |
+| `--no-follow`  | stop chasing focus; stay on the current (or `--output`) monitor      |
+| `--saturation` | punch the colors up (default `1.5`); `1` = as-is                     |
+| `--gain`       | overall brightness (default `1.1`)                                   |
+| `--blur`       | blur radius in px at 144p (default `2`, `0` = crisp-ish)             |
+| `--smooth`     | temporal smoothing `0..0.95` (default `0.5`; higher = calmer)        |
+| `--raw`        | faithful colors — no saturation/gain/gamma, a literal mirror         |
+| `--fps N`      | frame rate (default `24`; drop it to shave CPU further)              |
+
+```bash
+python3 keyboardrgb.py screen --output HDMI-A-1        # pin the external monitor
+python3 keyboardrgb.py screen --raw --smooth 0.7       # true colors, extra calm
+python3 keyboardrgb.py screen --saturation 2 --gain 1.3 # vivid and bright
+```
+
 ## Fun commands to try
 
 Copy-paste any of these. Press Ctrl-C to stop.
