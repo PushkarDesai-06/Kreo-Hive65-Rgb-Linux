@@ -105,6 +105,199 @@ def run_wave(k, dur):
         pass
 
 
+# --- audio-reactive effect registry -----------------------------------------
+# Each effect is a small strategy object: it declares whether it runs one band
+# per row (horizontal) or per column, sets up any cross-frame state in __init__,
+# advances that state once per frame in frame(), and returns (val, hue) for one
+# key in render(). Adding an effect is a new class + one EFFECTS entry — the
+# render loop in run_audio never changes. Mirrors the ENCODERS registry in
+# kbd_profiles: dispatch by name, open for extension, closed for modification.
+
+
+class _Frame:
+    """Per-frame audio features handed to the active effect's frame()/render()."""
+
+    __slots__ = ("disp", "energy", "bass", "treble", "t")
+
+    def __init__(self, disp, energy, bass, treble, t):
+        self.disp = disp
+        self.energy = energy
+        self.bass = bass
+        self.treble = treble
+        self.t = t
+
+
+class Effect:
+    """Base audio effect. Subclasses override frame()/render() (and is_horizontal
+    when the band-per-row vs band-per-column choice depends on the options)."""
+
+    horizontal = False  # band-per-row when True, band-per-column when False
+
+    @classmethod
+    def is_horizontal(cls, o):
+        return cls.horizontal
+
+    def __init__(self, k, o, nlanes):
+        self.o = o
+        self.ncols = k.p.cols
+        self.nrows = k.p.rows
+        self.nlanes = nlanes
+        self.geom = k.p.geom
+
+    def frame(self, f, frame_dt):
+        """Advance cross-frame state before the per-key render pass (default: none)."""
+
+    def render(self, f, name, col, row):
+        """Return (val, hue) in [0..1] for one key."""
+        raise NotImplementedError
+
+
+class WaveEffect(Effect):
+    """Center-out column spectrum with a scrolling gradient."""
+
+    def render(self, f, name, col, row):
+        val = cell_coverage(f.disp[col], row, self.nrows, "wave")
+        hue = col / self.ncols - self.o.scroll * f.t
+        return val, hue
+
+
+class BarsEffect(Effect):
+    """Equalizer bars; --direction picks the edge they grow from. left/right/sides
+    are horizontal (one band per row); bottom/top are vertical (one per column)."""
+
+    @classmethod
+    def is_horizontal(cls, o):
+        return o.direction in ("left", "right", "sides")
+
+    def render(self, f, name, col, row):
+        o, disp, ncols, nrows = self.o, f.disp, self.ncols, self.nrows
+        if o.direction == "bottom":  # grow bottom-up (per column)
+            val = bar_fill(disp[col], nrows - 1 - row, nrows)
+            hue = col / ncols - o.scroll * f.t
+        elif o.direction == "top":  # grow top-down (per column)
+            val = bar_fill(disp[col], row, nrows)
+            hue = col / ncols - o.scroll * f.t
+        elif o.direction == "left":  # grow left-to-right (per row)
+            val = bar_fill(disp[row], col, ncols)
+            hue = row / nrows - o.scroll * f.t
+        elif o.direction == "right":  # grow right-to-left (per row)
+            val = bar_fill(disp[row], ncols - 1 - col, ncols)
+            hue = row / nrows - o.scroll * f.t
+        else:  # sides: grow inward from both edges toward the middle
+            edge = min(col, ncols - 1 - col)
+            val = bar_fill(disp[row], edge, ncols // 2 + 1)
+            hue = row / nrows - o.scroll * f.t
+        return val, hue
+
+
+class SplitEffect(Effect):
+    """Bass grows from the left edge, treble from the right, dark in the middle."""
+
+    def render(self, f, name, col, row):
+        ncols = self.ncols
+        x = col / (ncols - 1) if ncols > 1 else 0.0
+        left = f.bass * max(0.0, 1.0 - 2.0 * x)  # bright at left -> 0 mid
+        right = f.treble * max(0.0, 2.0 * x - 1.0)  # 0 mid -> bright right
+        if left >= right:
+            val, hue0 = left, SPLIT_BASS_HUE
+        else:
+            val, hue0 = right, SPLIT_TREBLE_HUE
+        val = min(1.0, val)
+        hue = hue0 - self.o.scroll * f.t
+        return val, hue
+
+
+class FlowEffect(Effect):
+    """Bass waterfall: the left column samples the bass now and that punch scrolls
+    left-to-right. flow_hist[0] is the newest (left edge); column `col` reads the
+    bass from col/flow_cpf frames ago, linearly interpolated for a smooth glide."""
+
+    def __init__(self, k, o, nlanes):
+        super().__init__(k, o, nlanes)
+        frame_dt = 1.0 / o.fps
+        self.flow_cpf = max(1e-4, o.flow_speed * frame_dt)  # columns advanced per frame
+        self.flow_len = min(4096, int(self.ncols / self.flow_cpf) + 4)
+        self.flow_hist = [0.0] * self.flow_len
+
+    def frame(self, f, frame_dt):
+        self.flow_hist.insert(0, f.bass)  # push the current bass onto the left, scroll
+        del self.flow_hist[self.flow_len:]
+
+    def render(self, f, name, col, row):
+        fidx = col / self.flow_cpf
+        lo = int(fidx)
+        fr = fidx - lo
+        hist, hlen = self.flow_hist, self.flow_len
+        if lo + 1 < hlen:
+            bv = hist[lo] * (1.0 - fr) + hist[lo + 1] * fr
+        elif lo < hlen:
+            bv = hist[lo]
+        else:
+            bv = 0.0
+        val = bar_fill(bv, self.nrows - 1 - row, self.nrows)  # bottom-up, soft top
+        hue = col / self.ncols - self.o.scroll * f.t
+        return val, hue
+
+
+class VortexEffect(Effect):
+    """Black hole: a dark event horizon ringed by a rainbow accretion disk that
+    spins faster when louder; bass swells the hole and shoves the ring outward."""
+
+    def __init__(self, k, o, nlanes):
+        super().__init__(k, o, nlanes)
+        self.rot_phase = 0.0  # accumulated rotation (revolutions)
+        self.hole = 0.0
+        self.ring = 0.0
+
+    def frame(self, f, frame_dt):
+        self.rot_phase += (VORTEX_BASE + f.energy * VORTEX_SPIN) * frame_dt
+        self.hole = self.o.radius + f.bass * HOLE_SWELL  # event horizon breathes
+        self.ring = self.hole + RING_GAP + f.bass * RING_PUSH  # disk shoved out by bass
+
+    def render(self, f, name, col, row):
+        nx, ny, rad, ang = self.geom[name]
+        if rad < self.hole:
+            val = 0.0  # inside the event horizon: dark void
+        else:
+            d = rad - self.ring
+            shape = math.exp(-(d * d) / (2.0 * RING_W * RING_W))
+            # each band lights its own angular sector of the ring
+            bi = int((ang / TAU + 0.5) * self.ncols) % self.ncols
+            val = shape * (0.12 + 0.88 * f.disp[bi])
+        hue = ang / TAU + self.rot_phase + rad * 0.15  # rainbow spun by rot_phase
+        return val, hue
+
+
+class RippleEffect(Effect):
+    """Concentric rings pushed outward by bass hits."""
+
+    def __init__(self, k, o, nlanes):
+        super().__init__(k, o, nlanes)
+        self.ring_phase = 0.0  # accumulated ripple travel (ring cycles)
+
+    def frame(self, f, frame_dt):
+        self.ring_phase += (RIPPLE_BASE + f.bass * RIPPLE_SPEED) * frame_dt
+
+    def render(self, f, name, col, row):
+        nx, ny, rad, ang = self.geom[name]
+        ring = 0.5 + 0.5 * math.cos((rad * RIPPLE_RINGS - self.ring_phase) * TAU)
+        core = max(0.0, 1.0 - rad * 1.8) * f.bass
+        val = min(1.0, ring * (0.12 + 0.88 * f.energy) + core)
+        hue = rad - self.o.scroll * f.t
+        return val, hue
+
+
+# name -> effect class; the --effect choices and the render dispatch both read this
+EFFECTS = {
+    "wave": WaveEffect,
+    "bars": BarsEffect,
+    "vortex": VortexEffect,
+    "ripple": RippleEffect,
+    "split": SplitEffect,
+    "flow": FlowEffect,
+}
+
+
 def run_audio(k, argv):
     p = argparse.ArgumentParser(
         prog="keyboardrgb.py audio", description="audio-reactive spectrum wave"
@@ -117,7 +310,7 @@ def run_audio(k, argv):
         "--effect",
         "--shape",  # backward-compatible alias
         dest="effect",
-        choices=["wave", "bars", "vortex", "ripple", "split", "flow"],
+        choices=list(EFFECTS),
         default="wave",
         help="wave/bars = spectrum shapes; vortex/ripple = 2D audio-reactive "
         "fields; split = bass grows from the left edge, treble from the right; "
@@ -183,14 +376,15 @@ def run_audio(k, argv):
 
     ncols = k.p.cols
     nrows = k.p.rows
+    fx_cls = EFFECTS[o.effect]
     # Horizontal bars run one frequency band per row (bars grow sideways); every
     # other effect runs one band per column. The spectrum is sized to match, and
     # `disp` is indexed by row for horizontal bars, by column otherwise.
-    horizontal = o.effect == "bars" and o.direction in ("left", "right", "sides")
-    nlanes = nrows if horizontal else ncols
+    nlanes = nrows if fx_cls.is_horizontal(o) else ncols
     N = 1024
     spec = Spectrum(N, o.rate, nlanes)
     tap = AudioTap(o.source, o.rate, N)
+    fx = fx_cls(k, o, nlanes)
     base = parse_hex(o.color)
     print(
         f"audio-reactive: source={tap.source} mode={o.mode} effect={o.effect}"
@@ -207,14 +401,6 @@ def run_audio(k, argv):
     ref, REF_DECAY, REF_FLOOR = 1e-3, 0.998, 2e-4  # slow auto-gain reference
     levels = [0.0] * nlanes
     raw = [0.0] * nlanes
-    rot_phase = 0.0  # accumulated vortex rotation (revolutions)
-    ring_phase = 0.0  # accumulated ripple travel (ring cycles)
-    # flow: a scrolling history of the bass level. flow_hist[0] is the newest
-    # (left edge); cpf columns are travelled per frame, so column `col` reads the
-    # bass from col/cpf frames ago. The buffer spans the whole board width.
-    flow_cpf = max(1e-4, o.flow_speed * frame_dt)  # columns advanced per frame
-    flow_len = min(4096, int(ncols / flow_cpf) + 4)
-    flow_hist = [0.0] * flow_len
     # idle<->audio crossfade: mix 0 = idle (default effect), 1 = audio-reactive
     mix = 0.0  # start on the idle effect; fade up when music begins
     TAU_UP, TAU_DOWN = 0.30, 0.90  # crossfade time constants (up = snappier)
@@ -256,81 +442,11 @@ def run_audio(k, argv):
             nb = min(4, nlanes)  # lowest/highest bands -> bass/treble scalars
             bass = sum(levels[:nb]) / nb
             treble = sum(levels[nlanes - nb:]) / nb
-            hole = ring = 0.0
-            if o.effect == "vortex":
-                rot_phase += (VORTEX_BASE + energy * VORTEX_SPIN) * frame_dt
-                hole = o.radius + bass * HOLE_SWELL  # event horizon breathes
-                ring = hole + RING_GAP + bass * RING_PUSH  # disk shoved out by bass
-            elif o.effect == "ripple":
-                ring_phase += (RIPPLE_BASE + bass * RIPPLE_SPEED) * frame_dt
-            elif o.effect == "flow":  # push the current bass onto the left, scroll
-                flow_hist.insert(0, bass)
-                del flow_hist[flow_len:]
+            f = _Frame(disp, energy, bass, treble, t)
+            fx.frame(f, frame_dt)
 
             for name, col, row in k.p.keys_tuples:
-                if o.effect == "vortex":
-                    nx, ny, rad, ang = k.p.geom[name]
-                    if rad < hole:
-                        val = 0.0  # inside the event horizon: dark void
-                    else:
-                        d = rad - ring
-                        shape = math.exp(-(d * d) / (2.0 * RING_W * RING_W))
-                        # each band lights its own angular sector of the ring
-                        bi = int((ang / TAU + 0.5) * ncols) % ncols
-                        val = shape * (0.12 + 0.88 * disp[bi])
-                    # rainbow wrapped around the ring; rot_phase spins it
-                    hue = ang / TAU + rot_phase + rad * 0.15
-                elif o.effect == "ripple":
-                    nx, ny, rad, ang = k.p.geom[name]
-                    ring = 0.5 + 0.5 * math.cos((rad * RIPPLE_RINGS - ring_phase) * TAU)
-                    core = max(0.0, 1.0 - rad * 1.8) * bass
-                    val = min(1.0, ring * (0.12 + 0.88 * energy) + core)
-                    hue = rad - o.scroll * t
-                elif o.effect == "bars":  # equalizer bars, direction picks origin
-                    if o.direction == "bottom":  # grow bottom-up (per column)
-                        val = bar_fill(disp[col], nrows - 1 - row, nrows)
-                        hue = col / ncols - o.scroll * t
-                    elif o.direction == "top":  # grow top-down (per column)
-                        val = bar_fill(disp[col], row, nrows)
-                        hue = col / ncols - o.scroll * t
-                    elif o.direction == "left":  # grow left-to-right (per row)
-                        val = bar_fill(disp[row], col, ncols)
-                        hue = row / nrows - o.scroll * t
-                    elif o.direction == "right":  # grow right-to-left (per row)
-                        val = bar_fill(disp[row], ncols - 1 - col, ncols)
-                        hue = row / nrows - o.scroll * t
-                    else:  # sides: grow inward from both edges toward the middle
-                        edge = min(col, ncols - 1 - col)
-                        val = bar_fill(disp[row], edge, ncols // 2 + 1)
-                        hue = row / nrows - o.scroll * t
-                elif o.effect == "split":  # bass from the left, treble from the right
-                    x = col / (ncols - 1) if ncols > 1 else 0.0
-                    left = bass * max(0.0, 1.0 - 2.0 * x)  # bright at left -> 0 mid
-                    right = treble * max(0.0, 2.0 * x - 1.0)  # 0 mid -> bright right
-                    if left >= right:
-                        val, hue0 = left, SPLIT_BASS_HUE
-                    else:
-                        val, hue0 = right, SPLIT_TREBLE_HUE
-                    val = min(1.0, val)
-                    hue = hue0 - o.scroll * t
-                elif o.effect == "flow":  # bass waterfall scrolling left -> right
-                    # column col shows the bass from col/cpf frames ago, linearly
-                    # interpolated so the punch glides smoothly (no blocky steps)
-                    fidx = col / flow_cpf
-                    lo = int(fidx)
-                    fr = fidx - lo
-                    if lo + 1 < flow_len:
-                        bv = flow_hist[lo] * (1.0 - fr) + flow_hist[lo + 1] * fr
-                    elif lo < flow_len:
-                        bv = flow_hist[lo]
-                    else:
-                        bv = 0.0
-                    val = bar_fill(bv, nrows - 1 - row, nrows)  # bottom-up, soft top
-                    hue = col / ncols - o.scroll * t
-                else:  # wave: center-out column spectrum, scrolling gradient
-                    val = cell_coverage(disp[col], row, nrows, o.effect)
-                    hue = col / ncols - o.scroll * t
-
+                val, hue = fx.render(f, name, col, row)
                 if o.mode == "colorful":
                     a_rgb = palette_at(hue, v=val)
                 else:
