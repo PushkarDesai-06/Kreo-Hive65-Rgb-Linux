@@ -503,12 +503,47 @@ def run_audio(k, argv):
         default=0.004,
         help="audio peak below this counts as silence (tune per system)",
     )
+    p.add_argument(
+        "--erase",
+        action="store_true",
+        help="overlay the reactive erase effect: pressed keys and their "
+        "neighbors go dark on top of the audio effect, fading back on release",
+    )
+    p.add_argument(
+        "--erase-radius",
+        dest="erase_radius",
+        type=float,
+        default=1.5,
+        help="erase: darkened area around the pressed key in grid cells (default 1.5)",
+    )
+    p.add_argument(
+        "--erase-fade",
+        dest="erase_fade",
+        type=float,
+        default=0.5,
+        help="erase: seconds for a released key's color to fade back (default 0.5)",
+    )
+    p.add_argument(
+        "--input",
+        default=None,
+        help="erase: evdev input device (default: auto-detect the keyboard)",
+    )
     p.add_argument("--debug", action="store_true")
     o = p.parse_args(argv)
 
     ncols = k.p.cols
     nrows = k.p.rows
     fx_cls = EFFECTS[o.effect]
+    listener = None
+    if o.erase:
+        # imported here: reactive imports idle_color from this module
+        from reactive import KeyListener, _find_keyboard, apply_erase, erase_mask
+
+        input_dev = _find_keyboard(o.input)
+        listener = KeyListener(input_dev, {name for name, _, _ in k.p.keys_tuples})
+        listener.start()
+        print(f"erase overlay: radius={o.erase_radius:g} fade={o.erase_fade:g}s "
+              f"input={input_dev}")
     # Horizontal bars run one frequency band per row (bars grow sideways); every
     # other effect runs one band per column. The spectrum is sized to match, and
     # `disp` is indexed by row for horizontal bars, by column otherwise.
@@ -576,6 +611,10 @@ def run_audio(k, argv):
             treble = sum(levels[nlanes - nb:]) / nb
             f = _Frame(disp, energy, bass, treble, t)
             fx.frame(f, frame_dt)
+            if listener is not None:
+                state = listener.snapshot()[0]
+                mask = erase_mask(k.p.keys_tuples, state, tstart,
+                                  o.erase_radius, o.erase_fade)
 
             for name, col, row in k.p.keys_tuples:
                 val, hue = fx.render(f, name, col, row)
@@ -584,15 +623,17 @@ def run_audio(k, argv):
                 else:
                     a_rgb = (int(base[0] * val), int(base[1] * val), int(base[2] * val))
                 if mix >= 0.999:  # fully audio
-                    k.set_key(name, *a_rgb)
+                    rgb = a_rgb
                 else:  # crossfade toward the idle default effect
                     ir, ig, ib = idle_color(o.default, col, row, ncols, t)
-                    k.set_key(
-                        name,
+                    rgb = (
                         int(ir + (a_rgb[0] - ir) * mix),
                         int(ig + (a_rgb[1] - ig) * mix),
                         int(ib + (a_rgb[2] - ib) * mix),
                     )
+                if listener is not None:
+                    rgb = apply_erase(rgb, mask.get(name, 0.0))
+                k.set_key(name, *rgb)
             tflush = time.monotonic()
             try:
                 k.flush()

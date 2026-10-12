@@ -70,6 +70,10 @@ Usage:
                                sound returning fades back to audio instantly.
       --idle-gap SEC           silence before switching to --default (5.0)
       --silence-level FLOAT    peak below this = silence (0.004; tune per system)
+      --erase                  pressed keys + neighbors go dark over the effect
+      --erase-radius FLOAT     erase: darkened area in grid cells (default 1.5)
+      --erase-fade FLOAT       erase: fade-back time in seconds (default 0.5)
+      --input /dev/input/eventN  erase: evdev device (default: auto-detect)
       --fps N --source NAME --duration SEC --debug
     Captures system sound from the default sink's monitor via parec
     (PipeWire/PulseAudio); override with --source (see: pactl list short
@@ -89,6 +93,32 @@ Usage:
     Grabs the display with grim (wlroots Wayland) or ffmpeg x11grab (X11),
     downscales to 144p, blurs, and streams it to the keys. Needs ffmpeg (plus
     grim on Wayland). Runs until Ctrl-C.
+  keyboardrgb.py reactive [options]          # keypress-reactive lighting
+      --effect NAME            splash   = bright disc fades after release (default)
+                               ripple   = expanding ring from each press
+                               trail    = typing paints a gradient wake
+                               heatmap  = frequent keys glow hotter
+                               raindrops= random-colored layered splashes
+                               sonar    = ring bounces off board edges
+                               matrix   = digital rain down the column
+                               crosshair= laser beams along row and column
+                               sparkle  = fairy dust twinkling in a wide radius
+                               erase    = pressed keys go dark over --base
+      --base gradient|breathe|wave  erase: ambient effect (default gradient)
+    For erase on top of the music visualizer use `audio --erase` instead.
+      --mode colorful|single   coloring (default colorful)
+      --color RRGGBB           color for single mode (default 009bde)
+      --radius FLOAT           light radius in grid cells (default 1.5)
+      --fade FLOAT             fade-out time constant in seconds (default 0.5)
+      --scroll FLOAT           hue scroll speed (default 0.15)
+      --ripple-speed FLOAT     ring expansion speed, cells/sec (default 6.0)
+      --ripple-width FLOAT     ring thickness, cells (default 1.5)
+      --trail-length INT       recent presses to show (default 20)
+      --heat-decay FLOAT       heatmap recency decay in seconds (default 5.0)
+      --input /dev/input/eventN  evdev device (default: auto-detect)
+      --fps N --duration SEC --debug
+    Reads keyboard input via evdev and lights up keys around where you type.
+    Each press creates a localized light effect that fades after release.
 
 Device node + profile autodetected from /sys/class/hidraw (USB id + report id).
 """
@@ -109,6 +139,7 @@ from effects import (
     run_screen,
     run_wave,
 )
+from reactive import run_reactive
 
 
 def run_walk(k, argv):
@@ -251,6 +282,8 @@ def main():
         run_audio(k, a[1:])
     elif cmd == "screen":
         run_screen(k, a[1:])
+    elif cmd == "reactive":
+        run_reactive(k, a[1:])
     elif cmd == "walk":
         run_walk(k, a[1:])
     elif cmd == "raw":
