@@ -344,6 +344,41 @@ Mix them however you like with any `--effect` (`wave`, `bars`, `split`, `flow`,
 `vortex`, `ripple`) and `--mode single --color <hex>`. Start with the vortex;
 on a bass-heavy track it looks the best.
 
+## Desktop app (Keyboard Studio)
+
+If you'd rather click than type, there's a desktop app that shows every effect
+on a realistic on-screen copy of your keyboard. Pick an effect on the left,
+watch it run in the middle, and tune it with the sliders underneath. Every
+control has a hover tooltip saying what it does.
+
+It needs PySide6 (the command-line tool still needs nothing extra):
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-gui.txt
+.venv/bin/python keyboardrgb_gui.py
+```
+
+What you can do from it:
+
+- **Preview anything** on screen, even with the keyboard unplugged. Click keys
+  on the preview (or just type) to try the typing effects.
+- **Live on keyboard** mirrors the preview on the real board while you tweak.
+- **Run in background** keeps the effect going after you close the app. It's
+  the same command-line tool running quietly, so the **Copy command** button
+  gives you the exact command for a terminal.
+- **Export toggle script** writes a small start/stop script for a keybind,
+  like `toggle_audio.sh` but for any effect and settings.
+- **Save preset** keeps your favorite setups in the sidebar.
+- **Settings** has theme presets (or your own background and accent color),
+  **Launch on login** (starts hidden in the tray and turns your last lighting
+  back on), and copyable setup commands for permissions.
+
+Only one thing drives the keyboard at a time. Starting an effect anywhere (the
+app, a script or the terminal) politely stops whatever was running before.
+`python3 keyboardrgb.py status` tells you what's running and
+`python3 keyboardrgb.py stop` stops it.
+
 ## Web UI (optional)
 
 There's also a little browser app under `client/`. Its real job is piping

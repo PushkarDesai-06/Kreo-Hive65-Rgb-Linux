@@ -12,6 +12,7 @@ import sys
 import time
 
 import kbd_profiles
+from errors import SetupError
 
 
 def _IOC(dirn, typ, nr, size):
@@ -59,7 +60,8 @@ def find_device(profiles=None, sysfs_root="/sys/class/hidraw"):
             matches.append(("/dev/" + os.path.basename(path), prof))
     if not matches:
         known = ", ".join(sorted({u for p in profiles for u in p.usb_ids}))
-        raise SystemExit(
+        raise SetupError(
+            "device",
             "keyboard vendor interface not found (is it plugged in, wired mode?). "
             f"known ids: {known} — see --list-profiles"
         )
@@ -112,6 +114,12 @@ class Kbd:
             )
         return False
 
+    def close(self):
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+
     def set_slot(self, slot, r, g, b):
         # store in the board's wire byte order (e.g. GRB) so the buffer can be
         # streamed as-is; 'rgb' boards are unaffected
@@ -153,7 +161,7 @@ def _flush(k):
             raise
         print("keyboard dropped off the bus (firmware reset), reconnecting...")
         if not k.reopen():
-            raise SystemExit("reconnect failed")
+            raise SetupError("device", "reconnect failed")
         print(f"reconnected: {k.dev}")
         try:
             k.flush()

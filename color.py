@@ -24,6 +24,13 @@ COLORFUL_PALETTE = [
 ]
 
 
+def parse_palette(s):
+    """'ff4242,7c3aed,...' -> [(r,g,b), ...]; None/empty -> COLORFUL_PALETTE."""
+    if not s:
+        return COLORFUL_PALETTE
+    return [parse_hex(h) for h in s.split(",") if h.strip()] or COLORFUL_PALETTE
+
+
 def palette_at(u, v=1.0, palette=COLORFUL_PALETTE):
     """Sample a looping gradient of `palette` at position u (wraps), scaled by
     brightness v. Mirrors the web Gradient Lab's palAt so colorful mode matches."""

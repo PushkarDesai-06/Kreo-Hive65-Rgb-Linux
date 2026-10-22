@@ -100,6 +100,50 @@ class TestProfiles(unittest.TestCase):
             device.find_device(list(self.profiles.values()), sysfs_root=root)
 
 
+class TestVisualLayout(unittest.TestCase):
+    """The optional on-screen keycap layout the GUI draws."""
+
+    def setUp(self):
+        self.profiles = kbd_profiles.load_all()
+
+    def test_key_names_unique(self):
+        for pid, p in self.profiles.items():
+            names = [k.name for k in p.keys]
+            self.assertEqual(len(names), len(set(names)), pid)
+
+    def test_visual_covers_every_key(self):
+        for pid in ("hive65", "aulaf75"):
+            p = self.profiles[pid]
+            self.assertIsNotNone(p.visual, pid)
+            self.assertEqual(set(p.visual), set(p.slot), pid)
+
+    def test_rows_are_16u_and_caps_never_overlap(self):
+        for pid in ("hive65", "aulaf75"):
+            caps = list(self.profiles[pid].visual.items())
+            rows = {}
+            for _name, c in caps:
+                rows.setdefault(c.y, []).append(c)
+            for y, row in rows.items():
+                self.assertAlmostEqual(max(c.x + c.w for c in row), 16.0, msg=f"{pid} row {y}")
+            for i, (na, a) in enumerate(caps):
+                for nb, b in caps[i + 1:]:
+                    overlap = (a.x < b.x + b.w - 1e-9 and b.x < a.x + a.w - 1e-9
+                               and a.y < b.y + b.h - 1e-9 and b.y < a.y + a.h - 1e-9)
+                    self.assertFalse(overlap, f"{pid}: {na} overlaps {nb}")
+
+    def test_hive65_knob_is_unlit_and_home_rides_backspace(self):
+        p = self.profiles["hive65"]
+        self.assertEqual(p.unlit, {"home"})
+        self.assertFalse(p.visual["home"].lit)
+        self.assertEqual(p.visual["home"].shape, "knob")
+        self.assertEqual(p.key_aliases, {"home": "backspace"})
+        self.assertEqual(p.key_count(), 68)  # slot kept: frame layouts unchanged
+
+    def test_no_visual_block_means_grid(self):
+        self.assertIsNone(self.profiles["artemis"].visual)
+        self.assertTrue(self.profiles["artemis"].experimental)
+
+
 class TestWsServerBackCompat(unittest.TestCase):
     """The WS server sources its board from device.DEFAULT (the default profile)
     and must still describe the Hive 65."""

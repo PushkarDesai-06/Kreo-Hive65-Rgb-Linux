@@ -22,16 +22,17 @@ All modes use the profile's key geometry for distance calculations, so they
 scale to any board size.
 """
 
-import argparse
 import math
 import os
 import struct
 import threading
 import time
 
-from color import COLORFUL_PALETTE, hsv, palette_at, parse_hex
-from device import Kbd, _flush
+from color import hsv, palette_at, parse_hex, parse_palette
 from effects import idle_color
+from engine import LightingEffect, drive
+from errors import SetupError
+from params import EffectSpec, Param
 
 TAU = 2.0 * math.pi
 
@@ -50,6 +51,9 @@ KEY_UP = 0
 # evdev code → profile key name (lowercase, matching profiles/*.json)
 EVDEV_TO_NAME = {
     1: "esc",
+    41: "grave",
+    59: "f1", 60: "f2", 61: "f3", 62: "f4", 63: "f5", 64: "f6",
+    65: "f7", 66: "f8", 67: "f9", 68: "f10", 87: "f11", 88: "f12",
     2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8",
     10: "9", 11: "0", 12: "minus", 13: "equal", 14: "backspace",
     15: "tab",
@@ -65,7 +69,7 @@ EVDEV_TO_NAME = {
     97: "rctrl", 100: "ralt",
     102: "home", 103: "up", 104: "pgup",
     105: "left", 106: "right",
-    108: "down", 109: "pgdn",
+    107: "end", 108: "down", 109: "pgdn",
     111: "del",
     # fn is firmware-internal on most boards (no evdev event), but map it
     # just in case a board does expose it
@@ -84,7 +88,7 @@ def _find_keyboard(device_path=None):
         with open("/proc/bus/input/devices") as f:
             text = f.read()
     except OSError:
-        raise SystemExit("cannot read /proc/bus/input/devices")
+        raise SetupError("input", "cannot read /proc/bus/input/devices")
     blocks = text.strip().split("\n\n")
     for block in blocks:
         name_line = ""
@@ -117,8 +121,8 @@ def _find_keyboard(device_path=None):
                     # skip power buttons, lid switches
                     if "button" not in name_line.lower() and "switch" not in name_line.lower():
                         return f"/dev/input/{part}"
-    raise SystemExit(
-        "no keyboard input device found; specify --input /dev/input/eventN"
+    raise SetupError(
+        "input", "no keyboard input device found; specify --input /dev/input/eventN"
     )
 
 
@@ -130,12 +134,17 @@ _EVENT_SIZE = struct.calcsize(_EVENT_FMT)
 
 class KeyListener(threading.Thread):
     """Background thread that reads evdev events and records press/release
-    timestamps for each profile key-name. Thread-safe via a lock."""
+    timestamps for each profile key-name. Thread-safe via a lock.
 
-    def __init__(self, device_path, profile_keys):
+    The device is opened up front, so a missing permission surfaces as a
+    SetupError instead of a dead thread. device_path None makes a virtual
+    listener fed only by inject() (the GUI's fallback without evdev access)."""
+
+    def __init__(self, device_path, profile_keys, aliases=None):
         super().__init__(daemon=True)
         self.device_path = device_path
         self.profile_keys = set(profile_keys)  # known key names from profile
+        self.aliases = dict(aliases or {})  # e.g. home -> backspace (an Fn layer)
         self.lock = threading.Lock()
         # key_name → {down_t, up_t, held}
         self.state = {}
@@ -143,12 +152,25 @@ class KeyListener(threading.Thread):
         self.press_count = {}
         # ordered list of (time, key_name) for trail mode
         self.recent_presses = []
+        self._halt = threading.Event()
         self._fd = None
+        if device_path is not None:
+            try:
+                self._fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
+            except PermissionError:
+                raise SetupError(
+                    "input",
+                    f"{device_path}: permission denied; join the 'input' group to "
+                    "let keyboardrgb see key presses (see manual.md)",
+                )
+            except OSError as e:
+                raise SetupError("input", f"{device_path}: {e.strerror}")
 
     def run(self):
-        self._fd = os.open(self.device_path, os.O_RDONLY | os.O_NONBLOCK)
+        if self._fd is None:
+            return
         try:
-            while True:
+            while not self._halt.is_set():
                 try:
                     data = os.read(self._fd, _EVENT_SIZE * 64)
                 except BlockingIOError:
@@ -162,33 +184,54 @@ class KeyListener(threading.Thread):
                         _EVENT_FMT, data, offset
                     )
                     offset += _EVENT_SIZE
-                    if ev_type != EV_KEY:
+                    if ev_type != EV_KEY or value not in (KEY_DOWN, KEY_UP):
                         continue
                     name = EVDEV_TO_NAME.get(code)
+                    name = self.aliases.get(name, name)
                     if name is None or name not in self.profile_keys:
                         continue
-                    now = time.monotonic()
-                    with self.lock:
-                        if value == KEY_DOWN:
-                            self.state[name] = {
-                                "down_t": now,
-                                "up_t": None,
-                                "held": True,
-                            }
-                            self.press_count[name] = (
-                                self.press_count.get(name, 0) + 1
-                            )
-                            self.recent_presses.append((now, name))
-                            # trim old presses (keep last 200)
-                            if len(self.recent_presses) > 200:
-                                self.recent_presses = self.recent_presses[-200:]
-                        elif value == KEY_UP:
-                            s = self.state.get(name)
-                            if s and s["held"]:
-                                s["up_t"] = now
-                                s["held"] = False
+                    self._record(name, value == KEY_DOWN)
         finally:
             os.close(self._fd)
+
+    def _record(self, name, down):
+        now = time.monotonic()
+        with self.lock:
+            if down:
+                self.state[name] = {
+                    "down_t": now,
+                    "up_t": None,
+                    "held": True,
+                }
+                self.press_count[name] = self.press_count.get(name, 0) + 1
+                self.recent_presses.append((now, name))
+                # trim old presses (keep last 200)
+                if len(self.recent_presses) > 200:
+                    self.recent_presses = self.recent_presses[-200:]
+            else:
+                s = self.state.get(name)
+                if s and s["held"]:
+                    s["up_t"] = now
+                    s["held"] = False
+
+    def inject(self, name, down):
+        """Feed a press/release from outside evdev (GUI clicks and key events)."""
+        name = self.aliases.get(name, name)
+        if name in self.profile_keys:
+            self._record(name, down)
+
+    def gc(self, cutoff):
+        """Forget keys released before `cutoff` (monotonic seconds)."""
+        with self.lock:
+            for name in [n for n, s in self.state.items()
+                         if not s["held"] and s["up_t"] is not None and s["up_t"] < cutoff]:
+                del self.state[name]
+
+    def stop(self):
+        self._halt.set()
+        if self.ident is None and self._fd is not None:  # never started
+            os.close(self._fd)
+            self._fd = None
 
     def snapshot(self):
         """Return a copy of the current state dict, plus recent_presses and
@@ -211,15 +254,25 @@ def _key_dist(geom, name_a, name_b):
     return math.hypot(ax - bx, ay - by)
 
 
+_COORDS = {}
+
+
+def _coords(keys_tuples):
+    """name -> (col, row) for a profile's key list, built once per list (the
+    renderers ask for it per key pair, every frame)."""
+    hit = _COORDS.get(id(keys_tuples))
+    if hit is None or hit[0] is not keys_tuples:
+        hit = (keys_tuples, {n: (c, r) for n, c, r in keys_tuples})
+        _COORDS[id(keys_tuples)] = hit
+    return hit[1]
+
+
 def _col_row_dist(keys_tuples, name_a, name_b):
     """Chebyshev (grid) distance between two keys — 1 for any neighbor
     (including diagonals). Used when the effect wants a crisp '1 key radius'."""
-    a = b = None
-    for n, c, r in keys_tuples:
-        if n == name_a:
-            a = (c, r)
-        if n == name_b:
-            b = (c, r)
+    coords = _coords(keys_tuples)
+    a = coords.get(name_a)
+    b = coords.get(name_b)
     if a is None or b is None:
         return 99.0
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
@@ -274,13 +327,9 @@ def render_splash(k, geom, keys_tuples, state, now, o):
             val = bright * dist_atten
             if o.mode == "colorful":
                 # hue based on which key was pressed (column position)
-                src_col = None
-                for n, c, _r in keys_tuples:
-                    if n == src_name:
-                        src_col = c
-                        break
+                src_col = _coords(keys_tuples).get(src_name, (None,))[0]
                 hue = (src_col or 0) / k.p.cols
-                cr, cg, cb = palette_at(hue - age * o.scroll, v=val)
+                cr, cg, cb = palette_at(hue - age * o.scroll, v=val, palette=o.palette_rgb)
             else:
                 cr = int(o.base_color[0] * val)
                 cg = int(o.base_color[1] * val)
@@ -329,13 +378,9 @@ def render_ripple(k, geom, keys_tuples, state, now, o):
             if val < 0.01:
                 continue
             if o.mode == "colorful":
-                src_col = None
-                for n, c, _r in keys_tuples:
-                    if n == src_name:
-                        src_col = c
-                        break
+                src_col = _coords(keys_tuples).get(src_name, (None,))[0]
                 hue = (src_col or 0) / k.p.cols + age * 0.5
-                cr, cg, cb = palette_at(hue, v=val)
+                cr, cg, cb = palette_at(hue, v=val, palette=o.palette_rgb)
             else:
                 cr = int(o.base_color[0] * val)
                 cg = int(o.base_color[1] * val)
@@ -382,7 +427,7 @@ def render_trail(k, geom, keys_tuples, recent_presses, now, o):
             # hue walks along the trail: each successive press shifts hue
             hue = idx / max(1, trail_len) + now * o.scroll * 0.1
             if o.mode == "colorful":
-                cr, cg, cb = palette_at(hue, v=val)
+                cr, cg, cb = palette_at(hue, v=val, palette=o.palette_rgb)
             else:
                 cr = int(o.base_color[0] * val)
                 cg = int(o.base_color[1] * val)
@@ -438,26 +483,29 @@ def render_heatmap(k, geom, keys_tuples, state, press_count, now, o):
 _raindrop_hues = {}
 
 
-def render_raindrops(k, geom, keys_tuples, state, recent_presses, now, o):
+def render_raindrops(k, geom, keys_tuples, state, recent_presses, now, o, hues=None):
     """Each keypress drops a random-colored splash. Splashes stack additively
-    so rapid typing creates a watercolor layering effect."""
+    so rapid typing creates a watercolor layering effect. `hues` holds the
+    per-press colors across frames (defaults to the module-level dict)."""
+    if hues is None:
+        hues = _raindrop_hues
     fade = o.fade * 1.5  # raindrops linger a bit longer
     radius = o.radius
     # assign random hues to new presses
     import random
     for press_t, name in recent_presses:
         key = (press_t, name)
-        if key not in _raindrop_hues:
-            _raindrop_hues[key] = random.random()
+        if key not in hues:
+            hues[key] = random.random()
     # prune old hues
     cutoff = now - fade * 3
-    to_del = [k for k in _raindrop_hues if k[0] < cutoff]
+    to_del = [k for k in hues if k[0] < cutoff]
     for k2 in to_del:
-        del _raindrop_hues[k2]
+        del hues[k2]
 
     for dst_name, dst_col, dst_row in keys_tuples:
         r_tot, g_tot, b_tot = 0.0, 0.0, 0.0
-        for (press_t, src_name), hue in _raindrop_hues.items():
+        for (press_t, src_name), hue in hues.items():
             age = now - press_t
             if age > fade * 2.5:
                 continue
@@ -524,7 +572,7 @@ def render_sonar(k, geom, keys_tuples, state, now, o):
             bounce_num = int(raw_ring_r / max_dist)
             hue = 0.45 + bounce_num * 0.08  # cyan → green shifts
             if o.mode == "colorful":
-                cr, cg, cb = palette_at(hue + age * 0.1, v=val)
+                cr, cg, cb = palette_at(hue + age * 0.1, v=val, palette=o.palette_rgb)
             else:
                 cr, cg, cb = hsv(hue, s=0.7, v=val)
             r_tot += cr
@@ -607,7 +655,7 @@ def render_crosshair(k, geom, keys_tuples, state, now, o):
             if val < 0.01: continue
             
             if o.mode == "colorful":
-                cr, cg, cb = palette_at((src_col / k.p.cols) + age * 0.4, v=val)
+                cr, cg, cb = palette_at((src_col / k.p.cols) + age * 0.4, v=val, palette=o.palette_rgb)
             else:
                 cr = int(o.base_color[0] * val)
                 cg = int(o.base_color[1] * val)
@@ -678,7 +726,7 @@ def render_erase(k, keys_tuples, state, now, t, o):
     mask = erase_mask(keys_tuples, state, now, o.radius, o.fade)
     for name, col, row in keys_tuples:
         if o.mode == "colorful":
-            rgb = idle_color(o.base, col, row, ncols, t)
+            rgb = idle_color(o.base, col, row, ncols, t, o.palette_rgb)
         else:
             rgb = o.base_color
         k.set_key(name, *apply_erase(rgb, mask.get(name, 0.0)))
@@ -727,184 +775,182 @@ def apply_erase(rgb, dark):
 # ----------------------------------------------------------- main loop ---
 REACTIVE_EFFECTS = ("splash", "ripple", "trail", "heatmap", "raindrops", "sonar", "matrix", "crosshair", "sparkle", "erase")
 
+# effect name -> renderer(fx, canvas, state, recent_presses, press_count, now, t)
+RENDERERS = {
+    "splash": lambda fx, k, st, rp, pc, now, t:
+        render_splash(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "ripple": lambda fx, k, st, rp, pc, now, t:
+        render_ripple(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "trail": lambda fx, k, st, rp, pc, now, t:
+        render_trail(k, k.p.geom, k.p.keys_tuples, rp, now, fx.o),
+    "heatmap": lambda fx, k, st, rp, pc, now, t:
+        render_heatmap(k, k.p.geom, k.p.keys_tuples, st, pc, now, fx.o),
+    "raindrops": lambda fx, k, st, rp, pc, now, t:
+        render_raindrops(k, k.p.geom, k.p.keys_tuples, st, rp, now, fx.o, fx.hues),
+    "sonar": lambda fx, k, st, rp, pc, now, t:
+        render_sonar(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "matrix": lambda fx, k, st, rp, pc, now, t:
+        render_matrix(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "crosshair": lambda fx, k, st, rp, pc, now, t:
+        render_crosshair(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "sparkle": lambda fx, k, st, rp, pc, now, t:
+        render_sparkle(k, k.p.geom, k.p.keys_tuples, st, now, fx.o),
+    "erase": lambda fx, k, st, rp, pc, now, t:
+        render_erase(k, k.p.keys_tuples, st, now, t, fx.o),
+}
+
+_ALL_BUT = lambda *skip: tuple(e for e in REACTIVE_EFFECTS if e not in skip)  # noqa: E731
+
+REACTIVE_SPEC = EffectSpec("reactive", (
+    Param("effect", "choice", "splash", flags=("--effect",), choices=REACTIVE_EFFECTS,
+          help="splash = bright disc fades after release (default); "
+               "ripple = expanding ring from each press; "
+               "trail = typing paints a hue-shifting wake; "
+               "heatmap = frequently-pressed keys glow hotter; "
+               "raindrops = random-colored splashes that layer; "
+               "sonar = ring that bounces off board edges; "
+               "matrix = digital rain falls down the column; "
+               "crosshair = laser beams shoot along row and column; "
+               "sparkle = fairy dust twinkles in a wide radius; "
+               "erase = pressed keys go dark over an ambient base effect",
+          label="Typing effect",
+          labels=("Splash", "Ripple", "Typing Trail", "Heatmap", "Raindrops", "Sonar",
+                  "Matrix Rain", "Crosshair", "Sparkle", "Erase"),
+          tooltip="What happens when you press a key."),
+    Param("base", "choice", "gradient", flags=("--base",),
+          choices=("gradient", "breathe", "wave"),
+          help="erase: ambient effect on the rest of the board in colorful mode "
+               "(default gradient); single mode uses a solid --color instead",
+          label="Background", labels=("Gradient", "Breathe", "Wave"),
+          show_if={"effect": ("erase",), "mode": ("colorful",)},
+          tooltip="The lighting that runs on the rest of the keyboard while pressed "
+                  "keys go dark."),
+    Param("mode", "choice", "colorful", flags=("--mode",), choices=("colorful", "single"),
+          help="colorful = palette-based hues; single = one color (default colorful)",
+          label="Color style", labels=("Multicolor", "Single color"),
+          show_if={"effect": _ALL_BUT("heatmap", "raindrops")},
+          tooltip="Multicolor paints with a flowing palette. Single color uses one "
+                  "color of your choice."),
+    Param("color", "color", "009bde", flags=("--color",),
+          help="base color for single mode (default 009bde)",
+          label="Color",
+          show_if={"mode": ("single",), "effect": _ALL_BUT("heatmap", "raindrops", "sonar")},
+          tooltip="The color used in single-color style."),
+    Param("palette", "colors", None, flags=("--palette",),
+          help="colorful-mode gradient colors, comma-separated hex "
+               "(default ff4242,7c3aed,06b6d4,eab308)",
+          label="Gradient colors",
+          show_if={"mode": ("colorful",),
+                   "effect": ("splash", "ripple", "trail", "sonar", "crosshair", "erase")},
+          tooltip="The colors the multicolor style flows through, in order."),
+    Param("radius", "float", 1.5, flags=("--radius",), argtype=float,
+          help="light radius around the pressed key in grid cells (default 1.5; "
+               "1.0 = immediate neighbors only)",
+          label="Glow radius", min=0.5, max=5.0, step=0.1, decimals=1, unit="keys",
+          show_if={"effect": ("splash", "trail", "heatmap", "raindrops", "sparkle", "erase")},
+          tooltip="How far the light spreads around each pressed key."),
+    Param("fade", "float", 0.5, flags=("--fade",), argtype=float,
+          help="fade-out time constant in seconds (default 0.5)",
+          label="Fade time", min=0.05, max=3.0, step=0.05, decimals=2, unit="s",
+          group="Motion", show_if={"effect": _ALL_BUT("heatmap")},
+          tooltip="How long the light lingers after a key press."),
+    Param("scroll", "float", 0.15, flags=("--scroll",), argtype=float,
+          help="hue scroll speed for colorful mode (default 0.15)",
+          label="Color drift", min=0.0, max=1.0, step=0.01, decimals=2, group="Motion",
+          show_if={"effect": ("splash", "trail"), "mode": ("colorful",)},
+          tooltip="How fast the colors shift over time."),
+    Param("ripple_speed", "float", 6.0, flags=("--ripple-speed",), argtype=float,
+          help="ripple/sonar: ring expansion speed in grid cells/sec (default 6.0)",
+          label="Ring speed", min=1.0, max=30.0, step=0.5, decimals=1, unit="keys/s",
+          group="Motion", show_if={"effect": ("ripple", "sonar")},
+          tooltip="How fast the ring travels outward from the pressed key."),
+    Param("ripple_width", "float", 1.5, flags=("--ripple-width",), argtype=float,
+          help="ripple/sonar: ring thickness in grid cells (default 1.5)",
+          label="Ring thickness", min=0.3, max=5.0, step=0.1, decimals=1, unit="keys",
+          show_if={"effect": ("ripple", "sonar")},
+          tooltip="How thick the expanding ring is."),
+    Param("trail_length", "int", 20, flags=("--trail-length",), argtype=int,
+          help="trail: how many recent presses to show (default 20)",
+          label="Trail length", min=1, max=100, step=1, unit="keys",
+          show_if={"effect": ("trail",)},
+          tooltip="How many of your most recent key presses stay lit."),
+    Param("heat_decay", "float", 5.0, flags=("--heat-decay",), argtype=float,
+          help="heatmap: seconds for recent-press boost to decay (default 5.0)",
+          label="Cooldown", min=0.2, max=30.0, step=0.1, decimals=1, unit="s",
+          group="Motion", show_if={"effect": ("heatmap",)},
+          tooltip="How long a freshly pressed key stays extra hot."),
+    Param("fps", "float", 60.0, flags=("--fps",), argtype=float, help="render frame rate",
+          label="Frame rate", min=10, max=60, step=1, decimals=0, unit="fps",
+          group="Advanced", live=False,
+          tooltip="How many times per second the lighting updates. Lower values use less CPU."),
+    Param("input", "text", None, flags=("--input",),
+          help="evdev input device (default: auto-detect the keyboard)",
+          label="Input device", group="Advanced", live=False, source="inputs",
+          auto_label="Detect automatically",
+          tooltip="Which keyboard to watch for key presses."),
+    Param("duration", "float", None, flags=("--duration",), argtype=float,
+          help="stop after N seconds", gui=False),
+    Param("debug", "bool", False, flags=("--debug",), action="store_true", gui=False),
+), description="reactive keypress lighting effects")
+
+
+class TypingEffect(LightingEffect):
+    """Reactive lighting: the keyboard responds to keypresses with localized
+    light effects that fade out over time."""
+
+    spec = REACTIVE_SPEC
+    needs = frozenset({"keys"})
+
+    def start(self):
+        o = self.o
+        self.retune()
+        self.hues = {}  # raindrops: per-press colors
+        self.last_gc = None
+        self._snap = ({}, [], {})
+        self.listener, self.input_dev = self.inputs.keys(
+            o.input, {name for name, _, _ in self.p.keys_tuples}, self.p.key_aliases)
+
+    def retune(self):
+        self.o.base_color = parse_hex(self.o.color)
+        self.o.palette_rgb = parse_palette(self.o.palette)
+        self.render = RENDERERS[self.o.effect]
+
+    def describe(self):
+        o = self.o
+        return (f"reactive: effect={o.effect} mode={o.mode} radius={o.radius:g} "
+                f"fade={o.fade:g}s fps={o.fps:g} input={self.input_dev}")
+
+    def step(self, canvas, now, t):
+        o = self.o
+        if self.last_gc is None:
+            self.last_gc = now - t
+        self._snap = state, recent_presses, press_count = self.listener.snapshot()
+        # garbage-collect old state entries (> 10s after release)
+        if now - self.last_gc > 2.0:
+            self.last_gc = now
+            self.listener.gc(now - max(o.fade * 4, 10.0))
+        canvas.clear()
+        self.render(self, canvas, state, recent_presses, press_count, now, t)
+        return True
+
+    def debug_line(self, frames, tstart, tflush):
+        state, _recent, press_count = self._snap
+        now = tstart
+        active = sum(1 for s in state.values()
+                     if s["held"] or (s.get("up_t") and now - s["up_t"] < self.o.fade * 2))
+        return (
+            f"frame {frames}: active_keys={active} "
+            f"total_presses={sum(press_count.values())} "
+            f"dt={(time.monotonic() - tstart) * 1000:.1f}ms"
+        )
+
+    def stop(self):
+        if hasattr(self.listener, "stop"):
+            self.listener.stop()
+
 
 def run_reactive(k, argv):
     """Reactive lighting: the keyboard responds to keypresses with localized
     light effects that fade out over time. Runs until Ctrl-C."""
-    p = argparse.ArgumentParser(
-        prog="keyboardrgb.py reactive",
-        description="reactive keypress lighting effects",
-    )
-    p.add_argument(
-        "--effect",
-        choices=REACTIVE_EFFECTS,
-        default="splash",
-        help="splash = bright disc fades after release (default); "
-        "ripple = expanding ring from each press; "
-        "trail = typing paints a hue-shifting wake; "
-        "heatmap = frequently-pressed keys glow hotter; "
-        "raindrops = random-colored splashes that layer; "
-        "sonar = ring that bounces off board edges; "
-        "matrix = digital rain falls down the column; "
-        "crosshair = laser beams shoot along row and column; "
-        "sparkle = fairy dust twinkles in a wide radius; "
-        "erase = pressed keys go dark over an ambient base effect",
-    )
-    p.add_argument(
-        "--base",
-        choices=["gradient", "breathe", "wave"],
-        default="gradient",
-        help="erase: ambient effect on the rest of the board in colorful mode "
-        "(default gradient); single mode uses a solid --color instead",
-    )
-    p.add_argument(
-        "--mode",
-        choices=["colorful", "single"],
-        default="colorful",
-        help="colorful = palette-based hues; single = one color (default colorful)",
-    )
-    p.add_argument(
-        "--color",
-        default="009bde",
-        help="base color for single mode (default 009bde)",
-    )
-    p.add_argument(
-        "--radius",
-        type=float,
-        default=1.5,
-        help="light radius around the pressed key in grid cells (default 1.5; "
-        "1.0 = immediate neighbors only)",
-    )
-    p.add_argument(
-        "--fade",
-        type=float,
-        default=0.5,
-        help="fade-out time constant in seconds (default 0.5)",
-    )
-    p.add_argument(
-        "--scroll",
-        type=float,
-        default=0.15,
-        help="hue scroll speed for colorful mode (default 0.15)",
-    )
-    p.add_argument(
-        "--ripple-speed",
-        dest="ripple_speed",
-        type=float,
-        default=6.0,
-        help="ripple/sonar: ring expansion speed in grid cells/sec (default 6.0)",
-    )
-    p.add_argument(
-        "--ripple-width",
-        dest="ripple_width",
-        type=float,
-        default=1.5,
-        help="ripple/sonar: ring thickness in grid cells (default 1.5)",
-    )
-    p.add_argument(
-        "--trail-length",
-        dest="trail_length",
-        type=int,
-        default=20,
-        help="trail: how many recent presses to show (default 20)",
-    )
-    p.add_argument(
-        "--heat-decay",
-        dest="heat_decay",
-        type=float,
-        default=5.0,
-        help="heatmap: seconds for recent-press boost to decay (default 5.0)",
-    )
-    p.add_argument("--fps", type=float, default=60.0, help="render frame rate")
-    p.add_argument(
-        "--input",
-        default=None,
-        help="evdev input device (default: auto-detect the keyboard)",
-    )
-    p.add_argument(
-        "--duration", type=float, default=None, help="stop after N seconds"
-    )
-    p.add_argument("--debug", action="store_true")
-    o = p.parse_args(argv)
-
-    o.base_color = parse_hex(o.color)
-    input_dev = _find_keyboard(o.input)
-    print(f"reactive: effect={o.effect} mode={o.mode} radius={o.radius:g} "
-          f"fade={o.fade:g}s fps={o.fps:g} input={input_dev}")
-
-    # build lookup structures
-    geom = k.p.geom
-    keys_tuples = k.p.keys_tuples
-    profile_keys = {name for name, _, _ in keys_tuples}
-
-    # start the input listener
-    listener = KeyListener(input_dev, profile_keys)
-    listener.start()
-
-    frame_dt = 1.0 / o.fps
-    t0 = time.monotonic()
-    frames = 0
-
-    # pre-clean old state periodically
-    last_gc = t0
-
-    try:
-        while o.duration is None or time.monotonic() - t0 < o.duration:
-            tstart = time.monotonic()
-            now = tstart
-            state, recent_presses, press_count = listener.snapshot()
-
-            # garbage-collect old state entries (> 10s after release)
-            if now - last_gc > 2.0:
-                last_gc = now
-                cutoff = now - max(o.fade * 4, 10.0)
-                to_del = []
-                for name, s in state.items():
-                    if not s["held"] and s["up_t"] is not None and s["up_t"] < cutoff:
-                        to_del.append(name)
-                for name in to_del:
-                    with listener.lock:
-                        listener.state.pop(name, None)
-
-            k.clear()
-            if o.effect == "splash":
-                render_splash(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "ripple":
-                render_ripple(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "trail":
-                render_trail(k, geom, keys_tuples, recent_presses, now, o)
-            elif o.effect == "heatmap":
-                render_heatmap(k, geom, keys_tuples, state, press_count, now, o)
-            elif o.effect == "raindrops":
-                render_raindrops(k, geom, keys_tuples, state, recent_presses, now, o)
-            elif o.effect == "sonar":
-                render_sonar(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "matrix":
-                render_matrix(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "crosshair":
-                render_crosshair(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "sparkle":
-                render_sparkle(k, geom, keys_tuples, state, now, o)
-            elif o.effect == "erase":
-                render_erase(k, keys_tuples, state, now, now - t0, o)
-
-            _flush(k)
-            frames += 1
-            if o.debug and frames % int(o.fps) == 0:
-                active = sum(1 for s in state.values()
-                             if s["held"] or (s.get("up_t") and now - s["up_t"] < o.fade * 2))
-                print(
-                    f"frame {frames}: active_keys={active} "
-                    f"total_presses={sum(press_count.values())} "
-                    f"dt={(time.monotonic() - tstart) * 1000:.1f}ms"
-                )
-            time.sleep(max(0.0, frame_dt - (time.monotonic() - tstart)))
-    except KeyboardInterrupt:
-        pass
-    finally:
-        try:
-            k.clear()
-            k.flush()
-        except OSError:
-            pass
-    print(f"{frames} frames in {time.monotonic() - t0:.1f}s")
+    o = REACTIVE_SPEC.parse(argv)
+    drive(k, TypingEffect(k.p, o), o.duration, o.debug)

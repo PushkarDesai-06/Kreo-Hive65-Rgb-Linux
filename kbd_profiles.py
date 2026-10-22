@@ -24,6 +24,10 @@ import math
 import os
 
 Key = collections.namedtuple("Key", "name col row slot")
+# on-screen keycap, in key units (1u = one standard key): position, size,
+# shape ("rect" | "circle" | "knob"), an optional printed legend override, and
+# whether it has an LED under it (a volume knob, for one, does not)
+KeyCap = collections.namedtuple("KeyCap", "x y w h shape legend lit")
 
 PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiles")
 
@@ -51,6 +55,26 @@ def reorder(order, r, g, b):
     """Permute an (r,g,b) triple into a board's wire byte order, e.g. 'grb'."""
     ch = {"r": r, "g": g, "b": b}
     return tuple(ch[c] for c in order)
+
+
+def _build_visual(rows, vis, key_dicts):
+    """Keycap rectangles from the optional layout.visual block. Within each row
+    keys sit left to right in JSON order; a key's "w"/"h" set its size (1u by
+    default) and "x" jumps to an absolute position (for gaps). row_y gives each
+    row's top edge, so a board can space its F-row apart."""
+    row_y = vis.get("row_y") or list(range(rows))
+    cursor = {}
+    caps = {}
+    for kd in key_dicts:
+        row = kd["row"]
+        x = kd.get("x", cursor.get(row, 0.0))
+        w = kd.get("w", 1.0)
+        caps[kd["name"]] = KeyCap(float(x), float(row_y[row]) + kd.get("dy", 0.0),
+                                  float(w), float(kd.get("h", 1.0)),
+                                  kd.get("shape", "rect"), kd.get("legend"),
+                                  kd.get("led", True))
+        cursor[row] = x + w
+    return caps
 
 
 def _eval_slot(formula, col, row):
@@ -130,6 +154,17 @@ class Profile:
         self.slot = {k.name: k.slot for k in self.keys}
         self.keys_tuples = [(k.name, k.col, k.row) for k in self.keys]
         self.geom = _build_geom(self.rows, self.cols, lay.get("geometry", {}), self.keys)
+        # on-screen layout for the GUI; None means "draw the plain col/row grid"
+        self.visual = (
+            _build_visual(self.rows, lay["visual"], lay["keys"]) if "visual" in lay else None
+        )
+        self.experimental = bool(d.get("experimental", False))
+        # positions with no LED (e.g. the Hive 65's volume knob). They stay in the
+        # key list so frame layouts are unchanged; previews just never light them.
+        self.unlit = {kd["name"] for kd in lay["keys"] if kd.get("led") is False}
+        # evdev key -> profile key whose position it lights. On the Hive 65, Home
+        # is Fn+Backspace, so a Home press should ripple from Backspace.
+        self.key_aliases = dict(lay.get("key_aliases", {}))
 
         # validate
         if self.report_id == FORBIDDEN_REPORT:

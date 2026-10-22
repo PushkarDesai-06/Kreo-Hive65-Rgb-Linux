@@ -1,0 +1,866 @@
+{
+ "audio": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "colorful",
+     "single"
+    ],
+    "default": "colorful",
+    "dest": "mode",
+    "help": null,
+    "nargs": null,
+    "options": [
+     "--mode"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "009bde",
+    "dest": "color",
+    "help": "color for single mode",
+    "nargs": null,
+    "options": [
+     "--color"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "palette",
+    "help": "colorful-mode gradient colors, comma-separated hex (default ff4242,7c3aed,06b6d4,eab308)",
+    "nargs": null,
+    "options": [
+     "--palette"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.0,
+    "dest": "gain",
+    "help": "amplitude multiplier",
+    "nargs": null,
+    "options": [
+     "--gain"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.0,
+    "dest": "smooth",
+    "help": "smoothness multiplier",
+    "nargs": null,
+    "options": [
+     "--smooth"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "wave",
+     "bars",
+     "vortex",
+     "ripple",
+     "split",
+     "flow"
+    ],
+    "default": "wave",
+    "dest": "effect",
+    "help": "wave/bars = spectrum shapes; vortex/ripple = 2D audio-reactive fields; split = bass grows from the left edge, treble from the right; flow = the left column tracks the bass and that punch travels left-to-right across the board (see --flow-speed)",
+    "nargs": null,
+    "options": [
+     "--effect",
+     "--shape"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "bottom",
+     "top",
+     "left",
+     "right",
+     "sides"
+    ],
+    "default": "bottom",
+    "dest": "direction",
+    "help": "bars only: which edge the bars grow from \u2014 bottom (default) or top (vertical), left/right (horizontal), or sides (inward from both edges)",
+    "nargs": null,
+    "options": [
+     "--direction",
+     "--dir"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.15,
+    "dest": "scroll",
+    "help": "colorful-mode gradient scroll speed, hue cycles/sec left-to-right (0 = static); ignored by vortex (it spins on its own)",
+    "nargs": null,
+    "options": [
+     "--scroll"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.18,
+    "dest": "radius",
+    "help": "vortex event-horizon (dark hole) radius, 0..1 (default 0.18)",
+    "nargs": null,
+    "options": [
+     "--radius"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 8.0,
+    "dest": "flow_speed",
+    "help": "flow only: how fast a bass punch travels left-to-right, in columns/sec (default 8); lower = slower travel",
+    "nargs": null,
+    "options": [
+     "--flow-speed"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 30.0,
+    "dest": "fps",
+    "help": null,
+    "nargs": null,
+    "options": [
+     "--fps"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 48000,
+    "dest": "rate",
+    "help": null,
+    "nargs": null,
+    "options": [
+     "--rate"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "source",
+    "help": "pulse source name, or - for stdin",
+    "nargs": null,
+    "options": [
+     "--source"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "duration",
+    "help": "stop after N seconds",
+    "nargs": null,
+    "options": [
+     "--duration"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "gradient",
+     "breathe",
+     "wave",
+     "off"
+    ],
+    "default": "gradient",
+    "dest": "default",
+    "help": "non-audio effect to crossfade to when music is silent",
+    "nargs": null,
+    "options": [
+     "--default"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 5.0,
+    "dest": "idle_gap",
+    "help": "seconds of silence before switching to the --default effect",
+    "nargs": null,
+    "options": [
+     "--idle-gap"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.004,
+    "dest": "silence_level",
+    "help": "audio peak below this counts as silence (tune per system)",
+    "nargs": null,
+    "options": [
+     "--silence-level"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "dest": "erase",
+    "help": "overlay the reactive erase effect: pressed keys and their neighbors go dark on top of the audio effect, fading back on release",
+    "nargs": 0,
+    "options": [
+     "--erase"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.5,
+    "dest": "erase_radius",
+    "help": "erase: darkened area around the pressed key in grid cells (default 1.5)",
+    "nargs": null,
+    "options": [
+     "--erase-radius"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.5,
+    "dest": "erase_fade",
+    "help": "erase: seconds for a released key's color to fade back (default 0.5)",
+    "nargs": null,
+    "options": [
+     "--erase-fade"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "input",
+    "help": "erase: evdev input device (default: auto-detect the keyboard)",
+    "nargs": null,
+    "options": [
+     "--input"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "dest": "debug",
+    "help": null,
+    "nargs": 0,
+    "options": [
+     "--debug"
+    ],
+    "type": null
+   }
+  ],
+  "help": "usage: keyboardrgb.py audio [-h] [--mode {colorful,single}] [--color COLOR] [--palette PALETTE]\n                            [--gain GAIN] [--smooth SMOOTH]\n                            [--effect {wave,bars,vortex,ripple,split,flow}]\n                            [--direction {bottom,top,left,right,sides}] [--scroll SCROLL]\n                            [--radius RADIUS] [--flow-speed FLOW_SPEED] [--fps FPS] [--rate RATE]\n                            [--source SOURCE] [--duration DURATION]\n                            [--default {gradient,breathe,wave,off}] [--idle-gap IDLE_GAP]\n                            [--silence-level SILENCE_LEVEL] [--erase]\n                            [--erase-radius ERASE_RADIUS] [--erase-fade ERASE_FADE]\n                            [--input INPUT] [--debug]\n\naudio-reactive spectrum wave\n\noptions:\n  -h, --help            show this help message and exit\n  --mode {colorful,single}\n  --color COLOR         color for single mode\n  --palette PALETTE     colorful-mode gradient colors, comma-separated hex (default\n                        ff4242,7c3aed,06b6d4,eab308)\n  --gain GAIN           amplitude multiplier\n  --smooth SMOOTH       smoothness multiplier\n  --effect, --shape {wave,bars,vortex,ripple,split,flow}\n                        wave/bars = spectrum shapes; vortex/ripple = 2D audio-reactive fields;\n                        split = bass grows from the left edge, treble from the right; flow = the\n                        left column tracks the bass and that punch travels left-to-right across\n                        the board (see --flow-speed)\n  --direction, --dir {bottom,top,left,right,sides}\n                        bars only: which edge the bars grow from \u2014 bottom (default) or top\n                        (vertical), left/right (horizontal), or sides (inward from both edges)\n  --scroll SCROLL       colorful-mode gradient scroll speed, hue cycles/sec left-to-right (0 =\n                        static); ignored by vortex (it spins on its own)\n  --radius RADIUS       vortex event-horizon (dark hole) radius, 0..1 (default 0.18)\n  --flow-speed FLOW_SPEED\n                        flow only: how fast a bass punch travels left-to-right, in columns/sec\n                        (default 8); lower = slower travel\n  --fps FPS\n  --rate RATE\n  --source SOURCE       pulse source name, or - for stdin\n  --duration DURATION   stop after N seconds\n  --default {gradient,breathe,wave,off}\n                        non-audio effect to crossfade to when music is silent\n  --idle-gap IDLE_GAP   seconds of silence before switching to the --default effect\n  --silence-level SILENCE_LEVEL\n                        audio peak below this counts as silence (tune per system)\n  --erase               overlay the reactive erase effect: pressed keys and their neighbors go\n                        dark on top of the audio effect, fading back on release\n  --erase-radius ERASE_RADIUS\n                        erase: darkened area around the pressed key in grid cells (default 1.5)\n  --erase-fade ERASE_FADE\n                        erase: seconds for a released key's color to fade back (default 0.5)\n  --input INPUT         erase: evdev input device (default: auto-detect the keyboard)\n  --debug\n",
+  "prog": "keyboardrgb.py audio"
+ },
+ "flux": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": [
+     2,
+     3,
+     4
+    ],
+    "default": 3,
+    "dest": "colors",
+    "help": "number of moving color sources (default 3)",
+    "nargs": null,
+    "options": [
+     "--colors"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "walk",
+     "drift"
+    ],
+    "default": "walk",
+    "dest": "motion",
+    "help": "walk = random-walk + edge bounce (organic, unique each run); drift = sum-of-sines (silky, deterministic)",
+    "nargs": null,
+    "options": [
+     "--motion"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "hex",
+    "help": "comma-separated source colors (e.g. ff4242,7c3aed,06b6d4); default samples the colorful palette",
+    "nargs": null,
+    "options": [
+     "--hex"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.0,
+    "dest": "speed",
+    "help": "motion speed multiplier (default 1.0)",
+    "nargs": null,
+    "options": [
+     "--speed"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 2.0,
+    "dest": "sharp",
+    "help": "blend sharpness: 2 = soft gradient, higher = tighter cells around each source (default 2.0)",
+    "nargs": null,
+    "options": [
+     "--sharp"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 60.0,
+    "dest": "fps",
+    "help": null,
+    "nargs": null,
+    "options": [
+     "--fps"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "seed",
+    "help": "walk only: RNG seed for a repeatable wander (default random)",
+    "nargs": null,
+    "options": [
+     "--seed"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "duration",
+    "help": "stop after N seconds",
+    "nargs": null,
+    "options": [
+     "--duration"
+    ],
+    "type": "float"
+   }
+  ],
+  "help": "usage: keyboardrgb.py flux [-h] [--colors {2,3,4}] [--motion {walk,drift}] [--hex HEX]\n                           [--speed SPEED] [--sharp SHARP] [--fps FPS] [--seed SEED]\n                           [--duration DURATION]\n\ndrifting multi-source gradient\n\noptions:\n  -h, --help            show this help message and exit\n  --colors {2,3,4}      number of moving color sources (default 3)\n  --motion {walk,drift}\n                        walk = random-walk + edge bounce (organic, unique each run); drift = sum-\n                        of-sines (silky, deterministic)\n  --hex HEX             comma-separated source colors (e.g. ff4242,7c3aed,06b6d4); default samples\n                        the colorful palette\n  --speed SPEED         motion speed multiplier (default 1.0)\n  --sharp SHARP         blend sharpness: 2 = soft gradient, higher = tighter cells around each\n                        source (default 2.0)\n  --fps FPS\n  --seed SEED           walk only: RNG seed for a repeatable wander (default random)\n  --duration DURATION   stop after N seconds\n",
+  "prog": "keyboardrgb.py flux"
+ },
+ "reactive": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "splash",
+     "ripple",
+     "trail",
+     "heatmap",
+     "raindrops",
+     "sonar",
+     "matrix",
+     "crosshair",
+     "sparkle",
+     "erase"
+    ],
+    "default": "splash",
+    "dest": "effect",
+    "help": "splash = bright disc fades after release (default); ripple = expanding ring from each press; trail = typing paints a hue-shifting wake; heatmap = frequently-pressed keys glow hotter; raindrops = random-colored splashes that layer; sonar = ring that bounces off board edges; matrix = digital rain falls down the column; crosshair = laser beams shoot along row and column; sparkle = fairy dust twinkles in a wide radius; erase = pressed keys go dark over an ambient base effect",
+    "nargs": null,
+    "options": [
+     "--effect"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "gradient",
+     "breathe",
+     "wave"
+    ],
+    "default": "gradient",
+    "dest": "base",
+    "help": "erase: ambient effect on the rest of the board in colorful mode (default gradient); single mode uses a solid --color instead",
+    "nargs": null,
+    "options": [
+     "--base"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": [
+     "colorful",
+     "single"
+    ],
+    "default": "colorful",
+    "dest": "mode",
+    "help": "colorful = palette-based hues; single = one color (default colorful)",
+    "nargs": null,
+    "options": [
+     "--mode"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "009bde",
+    "dest": "color",
+    "help": "base color for single mode (default 009bde)",
+    "nargs": null,
+    "options": [
+     "--color"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "palette",
+    "help": "colorful-mode gradient colors, comma-separated hex (default ff4242,7c3aed,06b6d4,eab308)",
+    "nargs": null,
+    "options": [
+     "--palette"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.5,
+    "dest": "radius",
+    "help": "light radius around the pressed key in grid cells (default 1.5; 1.0 = immediate neighbors only)",
+    "nargs": null,
+    "options": [
+     "--radius"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.5,
+    "dest": "fade",
+    "help": "fade-out time constant in seconds (default 0.5)",
+    "nargs": null,
+    "options": [
+     "--fade"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.15,
+    "dest": "scroll",
+    "help": "hue scroll speed for colorful mode (default 0.15)",
+    "nargs": null,
+    "options": [
+     "--scroll"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 6.0,
+    "dest": "ripple_speed",
+    "help": "ripple/sonar: ring expansion speed in grid cells/sec (default 6.0)",
+    "nargs": null,
+    "options": [
+     "--ripple-speed"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.5,
+    "dest": "ripple_width",
+    "help": "ripple/sonar: ring thickness in grid cells (default 1.5)",
+    "nargs": null,
+    "options": [
+     "--ripple-width"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 20,
+    "dest": "trail_length",
+    "help": "trail: how many recent presses to show (default 20)",
+    "nargs": null,
+    "options": [
+     "--trail-length"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 5.0,
+    "dest": "heat_decay",
+    "help": "heatmap: seconds for recent-press boost to decay (default 5.0)",
+    "nargs": null,
+    "options": [
+     "--heat-decay"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 60.0,
+    "dest": "fps",
+    "help": "render frame rate",
+    "nargs": null,
+    "options": [
+     "--fps"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "input",
+    "help": "evdev input device (default: auto-detect the keyboard)",
+    "nargs": null,
+    "options": [
+     "--input"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "duration",
+    "help": "stop after N seconds",
+    "nargs": null,
+    "options": [
+     "--duration"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "dest": "debug",
+    "help": null,
+    "nargs": 0,
+    "options": [
+     "--debug"
+    ],
+    "type": null
+   }
+  ],
+  "help": "usage: keyboardrgb.py reactive [-h]\n                               [--effect {splash,ripple,trail,heatmap,raindrops,sonar,matrix,crosshair,sparkle,erase}]\n                               [--base {gradient,breathe,wave}] [--mode {colorful,single}]\n                               [--color COLOR] [--palette PALETTE] [--radius RADIUS] [--fade FADE]\n                               [--scroll SCROLL] [--ripple-speed RIPPLE_SPEED]\n                               [--ripple-width RIPPLE_WIDTH] [--trail-length TRAIL_LENGTH]\n                               [--heat-decay HEAT_DECAY] [--fps FPS] [--input INPUT]\n                               [--duration DURATION] [--debug]\n\nreactive keypress lighting effects\n\noptions:\n  -h, --help            show this help message and exit\n  --effect {splash,ripple,trail,heatmap,raindrops,sonar,matrix,crosshair,sparkle,erase}\n                        splash = bright disc fades after release (default); ripple = expanding\n                        ring from each press; trail = typing paints a hue-shifting wake; heatmap =\n                        frequently-pressed keys glow hotter; raindrops = random-colored splashes\n                        that layer; sonar = ring that bounces off board edges; matrix = digital\n                        rain falls down the column; crosshair = laser beams shoot along row and\n                        column; sparkle = fairy dust twinkles in a wide radius; erase = pressed\n                        keys go dark over an ambient base effect\n  --base {gradient,breathe,wave}\n                        erase: ambient effect on the rest of the board in colorful mode (default\n                        gradient); single mode uses a solid --color instead\n  --mode {colorful,single}\n                        colorful = palette-based hues; single = one color (default colorful)\n  --color COLOR         base color for single mode (default 009bde)\n  --palette PALETTE     colorful-mode gradient colors, comma-separated hex (default\n                        ff4242,7c3aed,06b6d4,eab308)\n  --radius RADIUS       light radius around the pressed key in grid cells (default 1.5; 1.0 =\n                        immediate neighbors only)\n  --fade FADE           fade-out time constant in seconds (default 0.5)\n  --scroll SCROLL       hue scroll speed for colorful mode (default 0.15)\n  --ripple-speed RIPPLE_SPEED\n                        ripple/sonar: ring expansion speed in grid cells/sec (default 6.0)\n  --ripple-width RIPPLE_WIDTH\n                        ripple/sonar: ring thickness in grid cells (default 1.5)\n  --trail-length TRAIL_LENGTH\n                        trail: how many recent presses to show (default 20)\n  --heat-decay HEAT_DECAY\n                        heatmap: seconds for recent-press boost to decay (default 5.0)\n  --fps FPS             render frame rate\n  --input INPUT         evdev input device (default: auto-detect the keyboard)\n  --duration DURATION   stop after N seconds\n  --debug\n",
+  "prog": "keyboardrgb.py reactive"
+ },
+ "screen": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "output",
+    "help": "monitor to capture (default: the focused one); see hyprctl monitors / wlr-randr",
+    "nargs": null,
+    "options": [
+     "--output"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": true,
+    "dest": "follow",
+    "help": "track the focused monitor (default)",
+    "nargs": 0,
+    "options": [
+     "--follow"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreFalseAction",
+    "choices": null,
+    "default": true,
+    "dest": "follow",
+    "help": "pin to --output (or the current focus) instead",
+    "nargs": 0,
+    "options": [
+     "--no-follow"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 24.0,
+    "dest": "fps",
+    "help": "frames per second",
+    "nargs": null,
+    "options": [
+     "--fps"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 144,
+    "dest": "res",
+    "help": "capture height in px \u2014 the '144p' working resolution",
+    "nargs": null,
+    "options": [
+     "--res"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 2.0,
+    "dest": "blur",
+    "help": "blur radius in px at 144p (0 = none)",
+    "nargs": null,
+    "options": [
+     "--blur"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.5,
+    "dest": "saturation",
+    "help": "saturation multiplier (1 = faithful)",
+    "nargs": null,
+    "options": [
+     "--saturation",
+     "--sat"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.1,
+    "dest": "gain",
+    "help": "brightness multiplier",
+    "nargs": null,
+    "options": [
+     "--gain"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.0,
+    "dest": "gamma",
+    "help": "gamma (<1 brightens mid-tones)",
+    "nargs": null,
+    "options": [
+     "--gamma"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.5,
+    "dest": "smooth",
+    "help": "temporal smoothing 0..0.95 (0 = none, higher = calmer)",
+    "nargs": null,
+    "options": [
+     "--smooth"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "dest": "raw",
+    "help": "faithful colors: disable saturation/gain/gamma",
+    "nargs": 0,
+    "options": [
+     "--raw"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "duration",
+    "help": "stop after N seconds",
+    "nargs": null,
+    "options": [
+     "--duration"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "dest": "debug",
+    "help": null,
+    "nargs": 0,
+    "options": [
+     "--debug"
+    ],
+    "type": null
+   }
+  ],
+  "help": "usage: keyboardrgb.py screen [-h] [--output OUTPUT] [--follow] [--no-follow] [--fps FPS]\n                             [--res RES] [--blur BLUR] [--saturation SATURATION] [--gain GAIN]\n                             [--gamma GAMMA] [--smooth SMOOTH] [--raw] [--duration DURATION]\n                             [--debug]\n\nmirror a monitor onto the keyboard (144p, blurred)\n\noptions:\n  -h, --help            show this help message and exit\n  --output OUTPUT       monitor to capture (default: the focused one); see hyprctl monitors / wlr-\n                        randr\n  --follow              track the focused monitor (default)\n  --no-follow           pin to --output (or the current focus) instead\n  --fps FPS             frames per second\n  --res RES             capture height in px \u2014 the '144p' working resolution\n  --blur BLUR           blur radius in px at 144p (0 = none)\n  --saturation, --sat SATURATION\n                        saturation multiplier (1 = faithful)\n  --gain GAIN           brightness multiplier\n  --gamma GAMMA         gamma (<1 brightens mid-tones)\n  --smooth SMOOTH       temporal smoothing 0..0.95 (0 = none, higher = calmer)\n  --raw                 faithful colors: disable saturation/gain/gamma\n  --duration DURATION   stop after N seconds\n  --debug\n",
+  "prog": "keyboardrgb.py screen"
+ },
+ "usage": "RGB control for SinoWealth / BY Tech RGB keyboards on Linux.\n\nEach supported board is described by a JSON *profile* in profiles/ (USB id,\nframe format, and key\u2192LED layout); the driver auto-detects the attached board\nand every effect reads its geometry from the profile, so the same code drives\ndifferent-sized keyboards. Adding a board is a new profiles/<id>.json file \u2014 no\ncode changes. See kbd_profiles.py. The default board is the Kreo Hive 65\n(258a:010c): report 6, 520-byte frame, 68 keys, LED index = col*6 + row + 1.\n\nModules: color (color math), audio (capture + FFT), screen (monitor capture),\ndevice (discovery + Kbd driver), effects (renderers), kbd_profiles (profile\nloader). This file is the CLI.\n\nBoard selection (any subcommand):\n  --profile NAME     force a specific profile (see --list-profiles)\n  --device /dev/hidrawN   force the hidraw node\n  --vid XXXX --pid XXXX   also match this USB id (test an uninstalled rebrand)\n  --list-profiles    list known boards and exit\n\nUsage:\n  keyboardrgb.py color <rrggbb>              # whole board one color\n  keyboardrgb.py key <keyname> <rrggbb> ...  # per-key colors (pairs), rest off\n  keyboardrgb.py gradient <rrggbb> <rrggbb>  # left-to-right gradient\n  keyboardrgb.py rainbow                     # rainbow across columns\n  keyboardrgb.py wave [seconds] [--speed X]  # animated hue wave (forever if no time)\n  keyboardrgb.py flux [options]              # drifting multi-source gradient\n      --colors 2|3|4           number of moving color sources (default 3)\n      --motion walk|drift      walk = random-walk + edge bounce (organic, unique\n                               each run); drift = sum-of-sines (silky, reproducible)\n      --hex R,R,...            custom source colors (default: colorful palette)\n      --speed FLOAT            motion speed multiplier (1.0)\n      --sharp FLOAT            blend sharpness, 2 = soft, higher = tighter (2.0)\n      --seed INT               walk only: seed a repeatable wander\n      --fps N --duration SEC   runs until Ctrl-C unless --duration is given\n  keyboardrgb.py off                         # all LEDs off\n  keyboardrgb.py status                      # what is driving the keyboard now\n  keyboardrgb.py stop                        # stop whatever is driving it\n  keyboardrgb.py raw <hex...>                # send raw feature report\n  keyboardrgb.py walk [--delay S] [--start N] [--end N]\n      # light one LED slot at a time to map a new board's layout (report-6 only)\n\n  color/key/gradient/rainbow/wave stay on until Ctrl-C: the board reverts to\n  its onboard lighting once streaming stops, so the tool holds the frame by\n  re-sending it. Add --once to set a single frame and exit (for scripts).\n  keyboardrgb.py audio [options]             # audio-reactive spectrum wave\n      --mode colorful|single   coloring (default colorful = 4-color gradient)\n      --color RRGGBB           color for single mode (default 009bde)\n      --palette HEX,HEX,...    colorful-mode gradient colors (default\n                               ff4242,7c3aed,06b6d4,eab308)\n      --gain FLOAT             amplitude multiplier (default 1.0)\n      --smooth FLOAT           smoothness multiplier (default 1.0)\n      --scroll FLOAT           colorful gradient scroll speed in hue\n                               cycles/sec, left-to-right; 0 = static (0.15)\n      --effect NAME            wave  = center-out spectrum (default)\n                               bars  = equalizer (see --direction for origin)\n                               split = bass grows from the left edge, treble\n                                       from the right, fading out in the middle\n                               flow  = the left column tracks the bass and\n                                       that punch travels left-to-right\n                                       (speed set by --flow-speed)\n                               vortex= black hole: dark center, rainbow ring\n                                       spinning around it (faster when loud)\n                               ripple= rings pushed outward by bass\n                               (--shape is a backward-compatible alias)\n      --direction NAME         bars only: edge the bars grow from \u2014\n                               bottom(default)|top|left|right|sides\n                               (left/right/sides are horizontal, one band/row)\n      --radius FLOAT           vortex event-horizon (hole) size 0..1 (0.18)\n      --flow-speed FLOAT       flow only: bass-punch travel speed, cols/sec (8.0)\n      --default NAME           non-audio effect shown when music is silent:\n                               gradient(default)|breathe|wave|off. After\n                               --idle-gap secs of silence it crossfades in;\n                               sound returning fades back to audio instantly.\n      --idle-gap SEC           silence before switching to --default (5.0)\n      --silence-level FLOAT    peak below this = silence (0.004; tune per system)\n      --erase                  pressed keys + neighbors go dark over the effect\n      --erase-radius FLOAT     erase: darkened area in grid cells (default 1.5)\n      --erase-fade FLOAT       erase: fade-back time in seconds (default 0.5)\n      --input /dev/input/eventN  erase: evdev device (default: auto-detect)\n      --fps N --source NAME --duration SEC --debug\n    Captures system sound from the default sink's monitor via parec\n    (PipeWire/PulseAudio); override with --source (see: pactl list short\n    sources), or --source - to pipe raw s16le mono PCM on stdin.\n  keyboardrgb.py screen [options]            # mirror a monitor onto the keys\n      --output NAME            monitor to capture (default: the focused one;\n                               see hyprctl monitors / wlr-randr)\n      --follow / --no-follow   track the focused monitor live (default: follow)\n      --res N                  capture height in px, the \"144p\" working res (144)\n      --blur FLOAT             blur radius in px at 144p, 0 = none (2.0)\n      --saturation FLOAT       saturation multiplier, 1 = faithful (1.5)\n      --gain FLOAT             brightness multiplier (1.1)\n      --gamma FLOAT            gamma, <1 brightens mid-tones (1.0)\n      --smooth FLOAT           temporal smoothing 0..0.95 (0.5)\n      --raw                    faithful colors (disable saturation/gain/gamma)\n      --fps N --duration SEC --debug\n    Grabs the display with grim (wlroots Wayland) or ffmpeg x11grab (X11),\n    downscales to 144p, blurs, and streams it to the keys. Needs ffmpeg (plus\n    grim on Wayland). Runs until Ctrl-C.\n  keyboardrgb.py reactive [options]          # keypress-reactive lighting\n      --effect NAME            splash   = bright disc fades after release (default)\n                               ripple   = expanding ring from each press\n                               trail    = typing paints a gradient wake\n                               heatmap  = frequent keys glow hotter\n                               raindrops= random-colored layered splashes\n                               sonar    = ring bounces off board edges\n                               matrix   = digital rain down the column\n                               crosshair= laser beams along row and column\n                               sparkle  = fairy dust twinkling in a wide radius\n                               erase    = pressed keys go dark over --base\n      --base gradient|breathe|wave  erase: ambient effect (default gradient)\n    For erase on top of the music visualizer use `audio --erase` instead.\n      --mode colorful|single   coloring (default colorful)\n      --color RRGGBB           color for single mode (default 009bde)\n      --palette HEX,HEX,...    colorful-mode gradient colors (default\n                               ff4242,7c3aed,06b6d4,eab308)\n      --radius FLOAT           light radius in grid cells (default 1.5)\n      --fade FLOAT             fade-out time constant in seconds (default 0.5)\n      --scroll FLOAT           hue scroll speed (default 0.15)\n      --ripple-speed FLOAT     ring expansion speed, cells/sec (default 6.0)\n      --ripple-width FLOAT     ring thickness, cells (default 1.5)\n      --trail-length INT       recent presses to show (default 20)\n      --heat-decay FLOAT       heatmap recency decay in seconds (default 5.0)\n      --input /dev/input/eventN  evdev device (default: auto-detect)\n      --fps N --duration SEC --debug\n    Reads keyboard input via evdev and lights up keys around where you type.\n    Each press creates a localized light effect that fades after release.\n\nOnly one process drives the board at a time: starting an effect stops the one\nalready running (a background runner, another CLI, or the app's live preview).\n\nDevice node + profile autodetected from /sys/class/hidraw (USB id + report id).\n",
+ "walk": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.6,
+    "dest": "delay",
+    "help": "seconds per slot",
+    "nargs": null,
+    "options": [
+     "--delay"
+    ],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "ffffff",
+    "dest": "color",
+    "help": "slot color (default white)",
+    "nargs": null,
+    "options": [
+     "--color"
+    ],
+    "type": null
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0,
+    "dest": "start",
+    "help": null,
+    "nargs": null,
+    "options": [
+     "--start"
+    ],
+    "type": "int"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "end",
+    "help": "last slot (default all)",
+    "nargs": null,
+    "options": [
+     "--end"
+    ],
+    "type": "int"
+   }
+  ],
+  "help": "usage: keyboardrgb.py walk [-h] [--delay DELAY] [--color COLOR] [--start START] [--end END]\n\nsweep-light LED slots to map a new keyboard's layout\n\noptions:\n  -h, --help     show this help message and exit\n  --delay DELAY  seconds per slot\n  --color COLOR  slot color (default white)\n  --start START\n  --end END      last slot (default all)\n",
+  "prog": "keyboardrgb.py walk"
+ },
+ "wave": {
+  "actions": [
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "dest": "secs",
+    "help": "stop after N seconds (default: run until Ctrl-C)",
+    "nargs": "?",
+    "options": [],
+    "type": "float"
+   },
+   {
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.4,
+    "dest": "speed",
+    "help": "hue cycles/sec (default 0.4)",
+    "nargs": null,
+    "options": [
+     "--speed"
+    ],
+    "type": "float"
+   }
+  ],
+  "help": "usage: keyboardrgb.py wave [-h] [--speed SPEED] [secs]\n\nanimated hue wave rolling across the columns\n\npositional arguments:\n  secs           stop after N seconds (default: run until Ctrl-C)\n\noptions:\n  -h, --help     show this help message and exit\n  --speed SPEED  hue cycles/sec (default 0.4)\n",
+  "prog": "keyboardrgb.py wave"
+ }
+}

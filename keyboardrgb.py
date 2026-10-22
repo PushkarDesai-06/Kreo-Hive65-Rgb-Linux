@@ -23,7 +23,7 @@ Usage:
   keyboardrgb.py key <keyname> <rrggbb> ...  # per-key colors (pairs), rest off
   keyboardrgb.py gradient <rrggbb> <rrggbb>  # left-to-right gradient
   keyboardrgb.py rainbow                     # rainbow across columns
-  keyboardrgb.py wave [seconds]              # animated hue wave (forever if no time)
+  keyboardrgb.py wave [seconds] [--speed X]  # animated hue wave (forever if no time)
   keyboardrgb.py flux [options]              # drifting multi-source gradient
       --colors 2|3|4           number of moving color sources (default 3)
       --motion walk|drift      walk = random-walk + edge bounce (organic, unique
@@ -34,6 +34,8 @@ Usage:
       --seed INT               walk only: seed a repeatable wander
       --fps N --duration SEC   runs until Ctrl-C unless --duration is given
   keyboardrgb.py off                         # all LEDs off
+  keyboardrgb.py status                      # what is driving the keyboard now
+  keyboardrgb.py stop                        # stop whatever is driving it
   keyboardrgb.py raw <hex...>                # send raw feature report
   keyboardrgb.py walk [--delay S] [--start N] [--end N]
       # light one LED slot at a time to map a new board's layout (report-6 only)
@@ -44,6 +46,8 @@ Usage:
   keyboardrgb.py audio [options]             # audio-reactive spectrum wave
       --mode colorful|single   coloring (default colorful = 4-color gradient)
       --color RRGGBB           color for single mode (default 009bde)
+      --palette HEX,HEX,...    colorful-mode gradient colors (default
+                               ff4242,7c3aed,06b6d4,eab308)
       --gain FLOAT             amplitude multiplier (default 1.0)
       --smooth FLOAT           smoothness multiplier (default 1.0)
       --scroll FLOAT           colorful gradient scroll speed in hue
@@ -108,6 +112,8 @@ Usage:
     For erase on top of the music visualizer use `audio --erase` instead.
       --mode colorful|single   coloring (default colorful)
       --color RRGGBB           color for single mode (default 009bde)
+      --palette HEX,HEX,...    colorful-mode gradient colors (default
+                               ff4242,7c3aed,06b6d4,eab308)
       --radius FLOAT           light radius in grid cells (default 1.5)
       --fade FLOAT             fade-out time constant in seconds (default 0.5)
       --scroll FLOAT           hue scroll speed (default 0.15)
@@ -120,14 +126,19 @@ Usage:
     Reads keyboard input via evdev and lights up keys around where you type.
     Each press creates a localized light effect that fades after release.
 
+Only one process drives the board at a time: starting an effect stops the one
+already running (a background runner, another CLI, or the app's live preview).
+
 Device node + profile autodetected from /sys/class/hidraw (USB id + report id).
 """
 
 import json
 import os
+import signal
 import sys
 import time
 
+import devlock
 import kbd_profiles
 from color import parse_hex
 from device import Kbd, PROFILES, find_device, _flush, _match_node, hold
@@ -211,6 +222,12 @@ def _select_profile(prof_name, vid, pid):
     return chosen
 
 
+def _terminate(signum, frame):
+    """SIGTERM/SIGHUP -> the same cleanup as Ctrl-C (blank the board, exit)."""
+    signal.signal(signum, signal.SIG_IGN)  # a second signal mustn't cut cleanup short
+    raise KeyboardInterrupt
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -237,6 +254,48 @@ def main():
     once = "--once" in a
     a = [x for x in a if x != "--once"]
     cmd = a[0]
+    if cmd == "status":
+        print(devlock.describe(devlock.owner()))
+        return 0
+    if cmd == "stop":
+        rec = devlock.owner()
+        if rec is None:
+            print(devlock.describe(None))
+            return 0
+        ok = devlock.request_release(rec)
+        print("stopped" if ok else "could not stop it: " + devlock.describe(rec))
+        return 0 if ok else 1
+    if "-h" in a or "--help" in a:
+        # help never needs the board, so it must not take it from a running effect
+        return _help(cmd, a[1:])
+    signal.signal(signal.SIGTERM, _terminate)
+    signal.signal(signal.SIGHUP, _terminate)
+    kind = "runner" if os.environ.get("KEYBOARDRGB_RUNNER") else "cli"
+    lock = devlock.DeviceLock(kind, mode=cmd, argv=sys.argv[1:])
+    if not lock.acquire(takeover=True):
+        raise SystemExit("the keyboard is busy: " + devlock.describe(devlock.owner()))
+    try:
+        return _run(cmd, a, once, profiles, prof_name, dev_override)
+    finally:
+        lock.release()
+
+
+def _help(cmd, argv):
+    import effects
+    import reactive
+
+    specs = {"wave": effects.WAVE_SPEC, "flux": effects.FLUX_SPEC, "audio": effects.AUDIO_SPEC,
+             "screen": effects.SCREEN_SPEC, "reactive": reactive.REACTIVE_SPEC}
+    if cmd in specs:
+        specs[cmd].parse(argv)  # argparse prints the help and exits
+    elif cmd == "walk":
+        run_walk(None, argv)
+    else:
+        print(__doc__)
+    return 0
+
+
+def _run(cmd, a, once, profiles, prof_name, dev_override):
     if dev_override:
         # forced node: detect its profile (unless --profile pinned it)
         sysfs = os.path.join("/sys/class/hidraw", os.path.basename(dev_override))
@@ -274,8 +333,7 @@ def main():
         if not once:
             hold(k, "rainbow")
     elif cmd == "wave":
-        dur = float(a[1]) if len(a) > 1 else None  # None = run until Ctrl-C
-        run_wave(k, dur)
+        run_wave(k, a[1:])
     elif cmd == "flux":
         run_flux(k, a[1:])
     elif cmd == "audio":

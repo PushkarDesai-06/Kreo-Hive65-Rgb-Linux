@@ -18,6 +18,7 @@ option so you can look things up.
 9. [Running it in the background](#9-running-it-in-the-background)
 10. [Tools for new keyboards](#10-tools-for-new-keyboards)
 11. [Troubleshooting](#11-troubleshooting)
+12. [Keyboard Studio (desktop app)](#12-keyboard-studio-desktop-app)
 
 ## Quick reference
 
@@ -27,12 +28,14 @@ option so you can look things up.
 | `key <name> <hex> ...`         | color individual keys, everything else off                      |
 | `gradient <hex> <hex>`         | left-to-right blend between two colors                          |
 | `rainbow`                      | static rainbow across the columns                               |
-| `wave [seconds]`               | animated rainbow rolling across the board                       |
+| `wave [seconds] [--speed X]`   | animated rainbow rolling across the board                       |
 | `flux [options]`               | drifting gradient made of moving color blobs                    |
 | `audio [options]`              | music visualizer driven by whatever your PC is playing          |
 | `reactive [options]`           | lighting that responds to the keys you press                    |
 | `screen [options]`             | mirrors your monitor's colors onto the keys                     |
 | `off`                          | all LEDs off                                                    |
+| `status`                       | shows what is driving the keyboard right now                    |
+| `stop`                         | stops whatever is driving the keyboard                          |
 | `walk [options]`               | lights one LED at a time, for mapping a new board's layout      |
 | `raw <hex...>`                 | sends a raw feature report (experts only, see the warning)      |
 
@@ -192,9 +195,11 @@ Turns every LED off.
 ```bash
 python3 keyboardrgb.py wave        # runs until Ctrl-C
 python3 keyboardrgb.py wave 30     # runs for 30 seconds
+python3 keyboardrgb.py wave --speed 1.2   # faster roll
 ```
 
-A rainbow that keeps rolling across the board.
+A rainbow that keeps rolling across the board. `--speed` is in hue cycles per
+second (default 0.4).
 
 ### flux
 
@@ -254,6 +259,7 @@ Pick one with `--effect`:
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- |
 | `--mode colorful\|single`  | `colorful` uses a soft red, violet, cyan and amber gradient; `single` uses one color                              | `colorful` |
 | `--color HEX`              | the color for `--mode single`                                                                                     | `009bde`   |
+| `--palette HEX,HEX,...`    | the gradient colors for `--mode colorful` (also used by the idle effect)                                          | built-in   |
 | `--gain FLOAT`             | how strongly it reacts; try `0.5` to `3`                                                                          | `1.0`      |
 | `--smooth FLOAT`           | higher is calmer and silkier, lower is twitchier; try `0.5` to `3`                                                | `1.0`      |
 | `--scroll FLOAT`           | how fast the gradient drifts across the keys, in cycles per second; `0` freezes it (`vortex` ignores this)        | `0.15`     |
@@ -335,6 +341,7 @@ the keyboard's input device and draws an effect around each one.
 | `--effect NAME`              | one of the effects above                                                             | `splash`    |
 | `--mode colorful\|single`    | palette colors, or one color                                                         | `colorful`  |
 | `--color HEX`                | the color for `--mode single`                                                        | `009bde`    |
+| `--palette HEX,HEX,...`      | the gradient colors for `--mode colorful`                                            | built-in    |
 | `--radius FLOAT`             | how far the effect spreads around the pressed key, in key widths                     | `1.5`       |
 | `--fade FLOAT`               | how quickly things fade after release, in seconds                                    | `0.5`       |
 | `--scroll FLOAT`             | how fast colors shift in colorful mode                                               | `0.15`      |
@@ -443,6 +450,20 @@ bind = SUPER, K, exec, ~/kbd-re/toggle_audio.sh
 To have it start with your session, add the same command to your desktop's
 autostart (for Hyprland, an `exec-once` line).
 
+Only one process drives the keyboard at a time. Starting any effect (from a
+terminal, a script or the desktop app) stops the one that was running, so two
+effects never fight over the board and flicker. Stopping is a normal Ctrl-C
+style shutdown, which means `kill` now also blanks the board cleanly. Two
+commands help with background effects:
+
+```bash
+python3 keyboardrgb.py status   # e.g. "running audio (background runner, pid 4242, for 310s)"
+python3 keyboardrgb.py stop     # stop it, wherever it was started
+```
+
+The desktop app (section 12) can also export a toggle script for any effect
+and settings, and start one at login for you.
+
 ## 10. Tools for new keyboards
 
 ### walk
@@ -511,3 +532,60 @@ pgrep -af keyboardrgb
 
 **Fn lighting shortcuts take over.** The keyboard's own Fn lighting keys still
 work and override streamed colors. Restart the command to take control back.
+
+## 12. Keyboard Studio (desktop app)
+
+`keyboardrgb_gui.py` is a desktop app for everything above. It needs PySide6:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-gui.txt
+.venv/bin/python keyboardrgb_gui.py           # open the app
+.venv/bin/python keyboardrgb_gui.py --tray    # start hidden in the tray
+```
+
+The window has three parts:
+
+- **Left:** every effect, grouped into Static & Animated, Music Visualizer,
+  Typing Effects and Screen Sync, plus your saved presets. Type in the search
+  box to filter. Right-click a preset to rename, duplicate, delete, export it or
+  run it in the background.
+- **Center:** a realistic copy of your keyboard running the effect live. Hover a
+  key to see its color. Click keys (or type) to try typing effects.
+- **Below:** the adjustments for that effect. Changes apply instantly. A dot next
+  to a setting means it differs from the default, double-clicking a slider
+  resets it, and the value box takes exact numbers. **Reset** puts the whole
+  effect back to its defaults.
+
+The header picks the keyboard model and shows whether it's connected. The Hive
+65 and the Aula F75 share a USB id, so pick yours once and the app remembers.
+
+| Control                  | What it does                                                        |
+| ------------------------ | ------------------------------------------------------------------- |
+| Live on keyboard         | mirrors the preview on the real keyboard while you experiment (Ctrl+L) |
+| Run in background        | keeps the effect running after the app closes (Ctrl+B)              |
+| Stop                     | stops a background effect (shows while one runs)                    |
+| Save preset              | saves the effect and its settings to the sidebar (Ctrl+S)           |
+| Copy command (`>_`)      | copies the exact terminal command for the current effect            |
+| ⋯ → Export toggle script | writes a start/stop script for a keybind                            |
+| Settings                 | theme, launch on login, close behavior and permission help (Ctrl+,) |
+
+The background effect is this CLI started quietly in its own process, with its
+output in `~/.local/state/keyboardrgb/runner.log`. If the preview is live when
+you close the window, the app hands it to a background effect so the lighting
+carries on (you can turn that off in Settings).
+
+**Launch on login** writes `~/.config/autostart/keyboardrgb-studio.desktop`. At
+login the app starts hidden in the system tray and turns your last background
+effect back on. Hyprland only runs those entries through uwsm or dex; Settings
+shows the `exec-once` line to add otherwise. The tray icon needs a tray in your
+bar (waybar's `tray` module, for example). Without one the app still restores
+your lighting at login, then exits.
+
+If the app can't read key presses (you're not in the `input` group), typing
+effects still work for keys pressed inside the app window, and a notice shows
+the command to fix it. If audio capture fails, the music visualizer shows its
+idle effect and tells you why.
+
+Settings live in `~/.config/keyboardrgb/settings.json`.
+

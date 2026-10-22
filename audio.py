@@ -8,6 +8,8 @@ import struct
 import subprocess
 import sys
 
+from errors import SetupError
+
 
 def default_monitor():
     try:
@@ -15,7 +17,8 @@ def default_monitor():
             ["pactl", "get-default-sink"], text=True, stderr=subprocess.DEVNULL
         ).strip()
     except (OSError, subprocess.CalledProcessError):
-        raise SystemExit(
+        raise SetupError(
+            "audio",
             "could not query default sink (is pactl/PipeWire running?); "
             "pass --source explicitly (pactl list short sources)"
         )
@@ -37,19 +40,24 @@ class AudioTap:
             self.fd = sys.stdin.buffer.fileno()
         else:
             self.source = source or default_monitor()
-            self.proc = subprocess.Popen(
-                [
-                    "parec",
-                    "--raw",
-                    "--format=s16le",
-                    f"--rate={rate}",
-                    "--channels=1",
-                    f"--device={self.source}",
-                    "--latency-msec=20",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            try:
+                self.proc = subprocess.Popen(
+                    [
+                        "parec",
+                        "--raw",
+                        "--format=s16le",
+                        f"--rate={rate}",
+                        "--channels=1",
+                        f"--device={self.source}",
+                        "--latency-msec=20",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError:
+                raise SetupError(
+                    "audio", "audio capture needs parec (pipewire-pulse or pulseaudio-utils)"
+                )
             self.fd = self.proc.stdout.fileno()
         os.set_blocking(self.fd, False)
 
@@ -64,7 +72,8 @@ class AudioTap:
                 self.eof = True
                 if self.proc and self.proc.poll() is not None:
                     err = self.proc.stderr.read() or b""
-                    raise SystemExit(
+                    raise SetupError(
+                        "audio",
                         f"parec exited ({self.proc.returncode}): "
                         f"{err.decode(errors='replace').strip()}\n"
                         "pick a source: pactl list short sources"
@@ -82,6 +91,8 @@ class AudioTap:
         if self.proc:
             self.proc.terminate()
             self.proc.wait()
+            self.proc.stdout.close()
+            self.proc.stderr.close()
 
 
 class Spectrum:

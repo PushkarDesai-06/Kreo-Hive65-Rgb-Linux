@@ -20,6 +20,8 @@ import subprocess
 import threading
 import time
 
+from errors import SetupError
+
 
 def hypr_monitors():
     """[(name, focused)] from hyprctl, or [] if Hyprland/hyprctl isn't there."""
@@ -71,7 +73,7 @@ class ScreenTap:
 
     def __init__(self, output, follow, cols, rows, res=144, blur=2.0, fps=24.0):
         if shutil.which("ffmpeg") is None:
-            raise SystemExit("screen sync needs ffmpeg (not found on PATH)")
+            raise SetupError("deps", "screen sync needs ffmpeg (not found on PATH)")
         self.cols, self.rows = cols, rows
         self.frame_bytes = cols * rows * 3
         self.follow = follow
@@ -94,11 +96,12 @@ class ScreenTap:
 
         if os.environ.get("WAYLAND_DISPLAY"):
             if shutil.which("grim") is None:
-                raise SystemExit("screen sync on Wayland needs grim (not on PATH)")
+                raise SetupError("deps", "screen sync on Wayland needs grim (not on PATH)")
             self.backend = "grim"
             self.output = output or default_output()
             if self.output is None:
-                raise SystemExit(
+                raise SetupError(
+                    "screen",
                     "could not determine a monitor to capture; pass --output "
                     "(see: hyprctl monitors / wlr-randr)"
                 )
@@ -121,7 +124,8 @@ class ScreenTap:
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
         else:
-            raise SystemExit(
+            raise SetupError(
+                "screen",
                 "no WAYLAND_DISPLAY or DISPLAY set; cannot find a screen to capture"
             )
 
@@ -177,7 +181,8 @@ class ScreenTap:
                 self.eof = True
                 if self.ff.poll() is not None:
                     err = (self.ff.stderr.read() or b"").decode(errors="replace")
-                    raise SystemExit(
+                    raise SetupError(
+                        "screen",
                         f"ffmpeg exited ({self.ff.returncode}): {err.strip()}"
                     )
                 break
@@ -202,3 +207,10 @@ class ScreenTap:
                 self.ff.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 self.ff.kill()
+                self.ff.wait()
+            for pipe in (self.ff.stdout, self.ff.stderr, self.ff.stdin):
+                if pipe is not None:
+                    try:
+                        pipe.close()
+                    except OSError:
+                        pass
