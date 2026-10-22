@@ -11,13 +11,21 @@ It works with the wired 65% keyboard that shows up on USB as `258a:010c`
 same chip and works too, with one extra flag. See
 [Using it with an Aula F75](#using-it-with-an-aula-f75).
 
+Rather click than type? **Keyboard Studio** is a desktop app that previews
+every effect on an on-screen copy of your keyboard, lets you tune it with
+sliders, and leaves it running in the background. See
+[Desktop app (Keyboard Studio)](#desktop-app-keyboard-studio).
+
+![Keyboard Studio](docs/keyboard-studio.png)
+
 ## What you need
 
 - Any modern Linux (Arch, Ubuntu, Fedora, Mint, take your pick) with
   PipeWire or PulseAudio. Every mainstream distro from the last few years
   ships one of them.
-- Python 3, which is already there on most distros. No pip packages to
-  install.
+- Python 3, which is already there on most distros. The command-line tool
+  needs no pip packages. The optional desktop app needs PySide6 (one `pip`
+  command, covered in its section).
 - The keyboard plugged in with its USB cable, in wired mode. Bluetooth and
   the 2.4 GHz dongle won't cut it, since the RGB channel only exists over
   the cable.
@@ -346,38 +354,125 @@ on a bass-heavy track it looks the best.
 
 ## Desktop app (Keyboard Studio)
 
-If you'd rather click than type, there's a desktop app that shows every effect
-on a realistic on-screen copy of your keyboard. Pick an effect on the left,
-watch it run in the middle, and tune it with the sliders underneath. Every
-control has a hover tooltip saying what it does.
+If you'd rather click than type, Keyboard Studio shows every effect on a
+realistic on-screen copy of your keyboard. Pick an effect on the left, watch it
+run in the middle, and tune it with the controls underneath. Hover over any
+button, slider or key and a tooltip tells you what it does.
 
-It needs PySide6 (the command-line tool still needs nothing extra):
+### Install and open it
+
+Do the [Setup](#setup-one-time-about-2-minutes) steps first (the udev rule is
+what lets the app light the real keyboard). Then, from the repo folder:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements-gui.txt
+.venv/bin/pip install -r requirements-gui.txt   # installs PySide6
 .venv/bin/python keyboardrgb_gui.py
 ```
 
-What you can do from it:
+The command-line tool keeps working on its own and still needs nothing extra.
 
-- **Preview anything** on screen, even with the keyboard unplugged. Click keys
-  on the preview (or just type) to try the typing effects.
-- **Live on keyboard** mirrors the preview on the real board while you tweak.
-- **Run in background** keeps the effect going after you close the app. It's
-  the same command-line tool running quietly, so the **Copy command** button
-  gives you the exact command for a terminal.
-- **Export toggle script** writes a small start/stop script for a keybind,
-  like `toggle_audio.sh` but for any effect and settings.
-- **Save preset** keeps your favorite setups in the sidebar.
-- **Settings** has theme presets (or your own background and accent color),
-  **Launch on login** (starts hidden in the tray and turns your last lighting
-  back on), and copyable setup commands for permissions.
+### Finding your way around
+
+- **Left sidebar:** every effect, grouped into Static & Animated, Music
+  Visualizer, Typing Effects and Screen Sync, plus your saved presets. Type in
+  the search box to filter.
+- **Center:** the keyboard preview, running live. Hover a key to see its exact
+  color. For typing effects, click keys on the preview or just type.
+- **Below the preview:** the adjustments for the selected effect. Changes apply
+  instantly. A dot next to a setting means you changed it from the default.
+  Double-click a slider to reset it, or type an exact number into the box next
+  to it. **Reset** puts the whole effect back to its defaults.
+- **Header:** pick your keyboard model and check whether it's connected. The Hive
+  65 and the Aula F75 share a USB id, so the app can't tell them apart; pick
+  yours once and it's remembered.
+
+For multicolor effects (the music visualizers and most typing effects), the
+**Gradient colors** row lets you pick the colors the gradient flows through.
+Use **+** and **−** to add or remove colors (2 to 6), and the reset arrow to go
+back to the built-in palette.
+
+The preview works with the keyboard unplugged, so you can try everything first.
+
+### Lighting up the real keyboard
+
+- **Live on keyboard** (Ctrl+L) mirrors the preview on the board while you
+  experiment, so every slider move shows up on the keys.
+- **Run in background** (Ctrl+B) keeps the effect going after you close the
+  app. It starts the command-line tool as a small background process with no
+  window. A **Stop** button appears in the header while it runs.
+- If the preview is live when you close the window, the app hands it to a
+  background effect so your lighting doesn't drop. You can turn that off in
+  Settings.
 
 Only one thing drives the keyboard at a time. Starting an effect anywhere (the
-app, a script or the terminal) politely stops whatever was running before.
+app, a script or the terminal) politely stops whatever was running before, so
+two effects never fight and flicker. From a terminal,
 `python3 keyboardrgb.py status` tells you what's running and
 `python3 keyboardrgb.py stop` stops it.
+
+### Presets, commands and keybinds
+
+- **Save preset** (Ctrl+S) stores the effect with its current settings under
+  Saved presets in the sidebar. Right-click a preset to rename, duplicate,
+  delete, export it or run it in the background.
+- **Copy command** (the `>_` button) copies the exact terminal command for what
+  you see, ready to paste into a script.
+- **Export toggle script** (in the `⋯` menu) writes a small start/stop script to
+  `~/.local/bin/`, like `toggle_audio.sh` but for any effect and settings. The
+  dialog also gives you the Hyprland keybind line to copy:
+  `bind = SUPER, K, exec, ~/.local/bin/keyboardrgb-<name>.sh`.
+
+### Settings
+
+- **Themes:** seven ready-made looks (the default is near-black with a lemon
+  accent), or pick your own background and accent colors. Everything else adapts
+  to them.
+- **Launch on login:** starts the app hidden in the system tray when you log in
+  and turns your last background effect back on.
+- **Close to tray:** keep the app in the tray instead of quitting when you close
+  the window.
+- **App launcher entry:** adds Keyboard Studio to rofi, wofi, fuzzel or your app
+  menu.
+- **Permissions:** the setup commands for keyboard access and key-press access,
+  ready to copy.
+
+On Hyprland, login items only run through uwsm or dex. If you use neither,
+Settings shows an `exec-once = ...` line to put in `hyprland.conf` instead. The
+tray icon needs a tray in your bar (waybar's `tray` module, for example).
+
+### Keyboard shortcuts
+
+| Shortcut | What it does                     |
+| -------- | -------------------------------- |
+| Ctrl+L   | toggle Live on keyboard          |
+| Ctrl+B   | run the effect in the background |
+| Ctrl+S   | save the current setup as preset |
+| Ctrl+F   | search effects                   |
+| Ctrl+,   | open Settings                    |
+| ↑ / ↓    | move through the effect list     |
+
+### When something's missing
+
+The app tells you inline when it can't do something, and gives you a command to
+copy that fixes it:
+
+- **"The keyboard is locked":** the udev rule from Setup isn't installed yet.
+- **"Typing effects respond inside this window":** the app can't see key
+  presses in other programs. They still work when you type in the app or click
+  the preview. To react everywhere, join the `input` group and log back in (see
+  [Keypress-reactive mode](manual.md#7-keypress-reactive-mode) in the manual
+  for what that permission means).
+- **"Can't hear any audio":** audio capture isn't working, so the music
+  visualizer shows its idle effect instead.
+- **No tray icon:** without a tray in your bar, closing the window quits the
+  app. A background effect keeps running anyway.
+- A terminal warning like `Could not register app ID` is harmless. Adding the
+  app launcher entry in Settings makes it go away.
+
+Settings are saved in `~/.config/keyboardrgb/settings.json`, and the background
+effect's log is in `~/.local/state/keyboardrgb/runner.log`. The
+[manual](manual.md#12-keyboard-studio-desktop-app) has the full reference.
 
 ## Web UI (optional)
 
