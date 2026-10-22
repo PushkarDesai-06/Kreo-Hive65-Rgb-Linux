@@ -36,8 +36,8 @@ jobs:
         # 3.14 matches tests/cli_snapshot.json, so it also checks the exact help text
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - name: Golden frames (byte-identical effect output)
@@ -49,8 +49,8 @@ jobs:
     name: App tests (PySide6, offscreen)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -71,10 +71,10 @@ jobs:
     # oldest supported runner: the AppImage runs on any distro with this glibc or newer
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # tags, for the version string
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -112,7 +112,7 @@ jobs:
           if [ "$code" -ne 124 ]; then echo "app exited early ($code)"; exit 1; fi
       - name: Checksums
         run: cd dist && sha256sum *.AppImage > SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Keyboard_Studio-${{ steps.version.outputs.version }}-x86_64
           path: |
@@ -128,8 +128,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

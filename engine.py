@@ -317,9 +317,9 @@ class LiveEngine(threading.Thread):
             if self._rebuild_at is not None:
                 timeout = min(timeout, max(0.0, self._rebuild_at - now))
             try:
-                self._handle(*self._q.get(timeout=timeout))
+                self._run_command(*self._q.get(timeout=timeout))
                 while True:  # apply everything queued before rendering
-                    self._handle(*self._q.get_nowait())
+                    self._run_command(*self._q.get_nowait())
             except queue.Empty:
                 pass
             if not self._running:
@@ -343,7 +343,7 @@ class LiveEngine(threading.Thread):
         if self._sink is not None:
             self._sink.stop()
 
-    def _handle(self, cmd, arg):
+    def _run_command(self, cmd, arg):
         if cmd == "effect":
             self._want = arg
             self._build()
