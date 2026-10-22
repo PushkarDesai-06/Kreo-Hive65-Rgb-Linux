@@ -7,18 +7,15 @@ import re
 import shlex
 import stat
 import subprocess
-import sys
 import threading
 import time
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
 import devlock
-from gui import catalog
+from gui import catalog, runtime
 from gui.settings import state_dir
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLI = os.path.join(ROOT, "keyboardrgb.py")
 GLOBAL_OPTS = ("--profile", "--device", "--vid", "--pid")
 
 
@@ -27,7 +24,7 @@ def cli_argv(profile_id, mode_argv):
 
 
 def shell_command(profile_id, mode_argv):
-    return shlex.join(["python3", CLI, *cli_argv(profile_id, mode_argv)])
+    return shlex.join([*runtime.cli_display(), *cli_argv(profile_id, mode_argv)])
 
 
 def label_for_argv(argv):
@@ -66,18 +63,18 @@ def slug(text):
 def toggle_script(title, profile_id, mode_argv, name):
     """A start/stop toggle (for a compositor keybind) running this effect."""
     args = shlex.join(cli_argv(profile_id, mode_argv))
+    cmd = " ".join(shlex.quote(c) for c in runtime.cli_display())
     return f"""#!/bin/sh
 # Toggle "{title}" on the keyboard. Exported by Keyboard Studio.
 # Run once to start the lighting, run again to stop it. Hyprland keybind:
 #   bind = SUPER, K, exec, {os.path.expanduser('~/.local/bin/')}keyboardrgb-{name}.sh
-KBD={shlex.quote(CLI)}
 PIDFILE="${{XDG_RUNTIME_DIR:-/tmp}}/keyboardrgb-{name}.pid"
 
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     kill "$(cat "$PIDFILE")"
     rm -f "$PIDFILE"
 else
-    KEYBOARDRGB_RUNNER=1 python3 "$KBD" {args} >/dev/null 2>&1 &
+    KEYBOARDRGB_RUNNER=1 {cmd} {args} >/dev/null 2>&1 &
     echo $! > "$PIDFILE"
 fi
 """
@@ -132,10 +129,10 @@ class Runner(QObject):
         return self.owner is not None and self.owner.get("kind") in ("runner", "cli")
 
     def start(self, profile_id, mode_argv):
-        argv = [sys.executable, CLI, *cli_argv(profile_id, mode_argv)]
+        argv = [*runtime.cli_command(), *cli_argv(profile_id, mode_argv)]
         env = dict(os.environ, KEYBOARDRGB_RUNNER="1", PYTHONUNBUFFERED="1")
         log = open(self._log, "w")
-        self.proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+        self.proc = subprocess.Popen(argv, cwd=os.path.expanduser("~"), env=env, stdin=subprocess.DEVNULL,
                                      stdout=log, stderr=subprocess.STDOUT,
                                      start_new_session=True)
         log.close()

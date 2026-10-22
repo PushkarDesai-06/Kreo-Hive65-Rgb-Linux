@@ -9,12 +9,10 @@ from PySide6.QtWidgets import (QAbstractButton, QDialog, QFileDialog, QGridLayou
                                QLineEdit, QPlainTextEdit, QScrollArea, QSystemTrayIcon,
                                QVBoxLayout, QWidget)
 
-from gui import autostart, theme
+from gui import autostart, permissions, theme
 from gui.widgets.controls import (Card, ColorSwatch, Switch, button, label, qc, separator)
 from gui.widgets.tooltip import set_tip
 
-UDEV_CMD = ("sudo cp {root}/60-keyboardrgb.rules /etc/udev/rules.d/ && "
-            "sudo udevadm control --reload && sudo udevadm trigger")
 INPUT_CMD = "sudo usermod -aG input $USER"
 
 
@@ -192,10 +190,21 @@ class SettingsDialog(QDialog):
         # permissions
         card = Card("Permissions", "plug")
         in_input = _in_group("input")
-        card.body_layout.addWidget(label(
-            "Keyboard access: install the udev rule once so the app can write lighting "
-            "frames to the keyboard without root.", "small", wrap=True))
-        card.body_layout.addWidget(code_row(UDEV_CMD.format(root=root),
+        installed = permissions.rule_installed()
+        self.rule_btn = button("Installed" if installed else "Install", icon="plug", size="sm",
+                               variant=None if installed else "primary",
+                               tip="Install keyboard access",
+                               tip_body="Installs the udev rule so the app can light your "
+                                        "keyboard without root. Asks for your password once.")
+        self.installer = permissions.RuleInstaller(self)
+        self.installer.finished.connect(self._rule_done)
+        self.rule_btn.clicked.connect(self._install_rule)
+        card.body_layout.addWidget(setting_row(
+            "Keyboard access",
+            "Lets the app write lighting to the keyboard. Needed once per computer.",
+            self.rule_btn))
+        card.body_layout.addWidget(label("Or run it yourself in a terminal:", "small"))
+        card.body_layout.addWidget(code_row(permissions.sudo_command(),
                                             lambda: toast("Copied to clipboard.", "success")))
         card.body_layout.addWidget(label(
             ("Typing effects can see key presses everywhere: you are in the input group."
@@ -229,6 +238,16 @@ class SettingsDialog(QDialog):
         for t in self.tiles:
             t.setChecked(False)
         self.themeChanged.emit("custom", "#" + self.base_sw.value(), "#" + self.accent_sw.value())
+
+    def _install_rule(self):
+        self.rule_btn.setEnabled(False)
+        self.rule_btn.setText("Waiting…")
+        self.installer.start()
+
+    def _rule_done(self, ok, msg):
+        self.rule_btn.setEnabled(True)
+        self.rule_btn.setText("Installed" if ok else "Install")
+        self.toast(msg, "success" if ok else "warning")
 
     def _autostart(self, on):
         try:

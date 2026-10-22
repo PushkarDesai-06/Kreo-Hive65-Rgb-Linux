@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry point: hand everything to the PyInstaller bundle.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/lib/keyboard-studio/keyboard-studio" "$@"

@@ -401,6 +401,7 @@
   "help": "usage: keyboardrgb.py flux [-h] [--colors {2,3,4}] [--motion {walk,drift}] [--hex HEX]\n                           [--speed SPEED] [--sharp SHARP] [--fps FPS] [--seed SEED]\n                           [--duration DURATION]\n\ndrifting multi-source gradient\n\noptions:\n  -h, --help            show this help message and exit\n  --colors {2,3,4}      number of moving color sources (default 3)\n  --motion {walk,drift}\n                        walk = random-walk + edge bounce (organic, unique each run); drift = sum-\n                        of-sines (silky, deterministic)\n  --hex HEX             comma-separated source colors (e.g. ff4242,7c3aed,06b6d4); default samples\n                        the colorful palette\n  --speed SPEED         motion speed multiplier (default 1.0)\n  --sharp SHARP         blend sharpness: 2 = soft gradient, higher = tighter cells around each\n                        source (default 2.0)\n  --fps FPS\n  --seed SEED           walk only: RNG seed for a repeatable wander (default random)\n  --duration DURATION   stop after N seconds\n",
   "prog": "keyboardrgb.py flux"
  },
+ "python": "3.14",
  "reactive": {
   "actions": [
    {

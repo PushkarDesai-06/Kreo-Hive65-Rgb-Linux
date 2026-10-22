@@ -12,6 +12,7 @@ import textwrap
 import threading
 import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -55,11 +56,13 @@ class TestStudio(unittest.TestCase):
             "dev": "/dev/null", "usb": "258a:010c", "profiles": ["hive65", "aulaf75"],
             "writable": True}]
         theme.ThemeManager.get().apply("#09090b", "#f0ec57")
-        from gui import background
+        from gui import runtime
         script = os.path.join(TMP, "fake_cli.py")
         with open(script, "w") as f:
             f.write(FAKE_RUNNER)
-        background.CLI = script
+        cls._cli_patch = mock.patch.object(runtime, "cli_command",
+                                           lambda: [sys.executable, script])
+        cls._cli_patch.start()
         from gui.controller import Studio
         from gui.main_window import MainWindow
         from gui.settings import Settings
@@ -74,6 +77,7 @@ class TestStudio(unittest.TestCase):
         cls.studio.runner.stop()
         cls.studio.shutdown()
         cls.win.close()
+        cls._cli_patch.stop()
 
     def pump(self, sec=0.2, until=None):
         end = time.monotonic() + sec

@@ -4,7 +4,7 @@ types, choices, help text) and the top-level usage text must stay identical
 across refactors, so generating parsers from the param schema changes nothing
 for existing scripts and keybinds.
 
-    ./tests/test_cli_snapshot.py --save          # snapshot the current CLI
+    ./tests/test_cli_snapshot.py --save          # snapshot the current CLI (on Python 3.14)
     python3 -m unittest tests.test_cli_snapshot  # assert it is unchanged
 """
 import json
@@ -47,7 +47,7 @@ def _capture(self, args=None, namespace=None):
     raise _Got({"prog": self.prog, "help": self.format_help(), "actions": acts})
 
 argparse.ArgumentParser.parse_args = _capture
-out = {"usage": keyboardrgb.__doc__}
+out = {"usage": keyboardrgb.__doc__, "python": ".".join(map(str, sys.version_info[:2]))}
 for cmd in %(cmds)r:
     sys.argv = ["keyboardrgb.py", cmd]
     sys.stdout = open(os.devnull, "w")
@@ -74,9 +74,20 @@ class TestCliSnapshot(unittest.TestCase):
             base = json.load(f)
         cur = probe()
         self.assertEqual(sorted(base), sorted(cur))
+        # argparse's rendered help layout differs between Python versions (3.13
+        # changed how aliases print), so the full text is only compared on the
+        # version that recorded the snapshot; flags, defaults, types, choices and
+        # every help string are compared everywhere.
+        same_python = base.get("python") == cur["python"]
         for key in base:
+            if key == "python":
+                continue
             with self.subTest(cmd=key):
-                self.assertEqual(base[key], cur[key])
+                if key == "usage" or same_python:
+                    self.assertEqual(base[key], cur[key])
+                else:
+                    self.assertEqual(base[key]["prog"], cur[key]["prog"])
+                    self.assertEqual(base[key]["actions"], cur[key]["actions"])
 
 
 if __name__ == "__main__":

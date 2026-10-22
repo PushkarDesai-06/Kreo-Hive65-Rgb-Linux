@@ -24,8 +24,8 @@ sliders, and leaves it running in the background. See
   PipeWire or PulseAudio. Every mainstream distro from the last few years
   ships one of them.
 - Python 3, which is already there on most distros. The command-line tool
-  needs no pip packages. The optional desktop app needs PySide6 (one `pip`
-  command, covered in its section).
+  needs no pip packages. The optional desktop app is a single download (an
+  AppImage), or one `pip` command if you run it from the source.
 - The keyboard plugged in with its USB cable, in wired mode. Bluetooth and
   the 2.4 GHz dongle won't cut it, since the RGB channel only exists over
   the cable.
@@ -359,7 +359,35 @@ realistic on-screen copy of your keyboard. Pick an effect on the left, watch it
 run in the middle, and tune it with the controls underneath. Hover over any
 button, slider or key and a tooltip tells you what it does.
 
-### Install and open it
+### Download it (AppImage)
+
+The easiest way: grab `Keyboard_Studio-<version>-x86_64.AppImage` from the
+[Releases page](https://github.com/PushkarDesai-06/Kreo-Hive65-Rgb-Linux/releases),
+then:
+
+```bash
+chmod +x Keyboard_Studio-*.AppImage
+./Keyboard_Studio-*.AppImage
+```
+
+It's one file (about 45 MB) with everything inside, no Python or pip needed.
+The first time, the app says the keyboard is locked: click **Install access**
+and type your password. That installs the same udev rule as the
+[Setup](#setup-one-time-about-2-minutes) steps, once per computer. If no password
+prompt appears (some minimal Hyprland setups have no polkit agent), use **Copy
+command** and run it in a terminal instead.
+
+The AppImage also contains the command-line tool. Anything in this README works
+as `./Keyboard_Studio-*.AppImage --cli <command>`, for example
+`./Keyboard_Studio-*.AppImage --cli audio --effect bars`. Background effects,
+exported toggle scripts and launch on login all point at the AppImage file, so
+keep it somewhere permanent (like `~/Applications/`) before using them.
+
+It needs glibc 2.35 or newer (Ubuntu 22.04, Fedora 36, Debian 12, any current
+Arch) and a 64-bit Intel/AMD machine. Audio and screen sync still use your
+system's `parec`, `grim` and `ffmpeg`.
+
+### Or run it from the source
 
 Do the [Setup](#setup-one-time-about-2-minutes) steps first (the udev rule is
 what lets the app light the real keyboard). Then, from the repo folder:
@@ -371,6 +399,25 @@ python3 -m venv .venv
 ```
 
 The command-line tool keeps working on its own and still needs nothing extra.
+
+### Building the AppImage yourself
+
+```bash
+python3 -m venv build-venv
+build-venv/bin/pip install -r packaging/requirements-build.txt
+PYTHON=build-venv/bin/python packaging/build-appimage.sh
+# -> dist/Keyboard_Studio-<version>-x86_64.AppImage
+```
+
+The script freezes the app with PyInstaller (`packaging/keyboard-studio.spec`),
+wraps it in an AppDir and packs it with `appimagetool`, which it downloads the
+first time. GitHub Actions (`.github/workflows/ci.yml`) runs the tests on every
+push and pull request, builds the AppImage on every push to `main` (download it
+from the run's artifacts), and publishes a release when you push a version tag:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
 
 ### Finding your way around
 

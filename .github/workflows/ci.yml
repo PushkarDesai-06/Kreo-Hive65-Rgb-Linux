@@ -1,0 +1,143 @@
+# Tests on every push and pull request; an AppImage on every push to main
+# (downloadable from the run's artifacts); a GitHub Release with the AppImage
+# attached when a version tag like v1.2.0 is pushed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  # system libraries Qt needs to start (offscreen tests) and that PyInstaller
+  # bundles for X11/Wayland
+  QT_APT_PACKAGES: >-
+    libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3
+    libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0
+    libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1
+    libwayland-client0 libwayland-cursor0 libwayland-egl1
+
+jobs:
+  cli:
+    name: CLI (stdlib only, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.14 matches tests/cli_snapshot.json, so it also checks the exact help text
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Golden frames (byte-identical effect output)
+        run: python tests/verify_golden.py
+      - name: Unit tests (GUI tests skip without PySide6)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  gui:
+    name: App tests (PySide6, offscreen)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-gui.txt
+      - name: Qt system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $QT_APT_PACKAGES
+      - run: pip install -r requirements-gui.txt
+      - name: Unit and app smoke tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  appimage:
+    name: Build AppImage
+    needs: [cli, gui]
+    # oldest supported runner: the AppImage runs on any distro with this glibc or newer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags, for the version string
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: packaging/requirements-build.txt
+      - name: Qt system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $QT_APT_PACKAGES
+      - run: pip install -r packaging/requirements-build.txt
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        env:
+          PYTHON: python
+        run: packaging/build-appimage.sh "${{ steps.version.outputs.version }}"
+      - name: Smoke test the AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"  # no FUSE on the runner
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          app="$(ls dist/*.AppImage)"
+          "$app" --cli --list-profiles
+          "$app" --cli wave --help
+          # the app should come up and keep running; timeout's 124 means it did
+          set +e
+          timeout 15 "$app"
+          code=$?
+          set -e
+          if [ "$code" -ne 124 ]; then echo "app exited early ($code)"; exit 1; fi
+      - name: Checksums
+        run: cd dist && sha256sum *.AppImage > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Keyboard_Studio-${{ steps.version.outputs.version }}-x86_64
+          path: |
+            dist/*.AppImage
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: appimage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            artifacts/*.AppImage artifacts/SHA256SUMS 60-keyboardrgb.rules \
+            --title "Keyboard Studio $GITHUB_REF_NAME" \
+            --generate-notes

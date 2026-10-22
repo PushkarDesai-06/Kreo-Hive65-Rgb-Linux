@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Studio
+Comment=Preview and run RGB keyboard lighting effects
+Exec=keyboard-studio
+Icon=keyboard-studio
+Terminal=false
+Categories=Utility;Settings;HardwareSettings;
+Keywords=rgb;keyboard;lighting;led;

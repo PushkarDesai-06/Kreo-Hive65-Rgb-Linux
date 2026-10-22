@@ -1,0 +1,4 @@
+# Pinned toolchain for the AppImage build (CI and packaging/build-appimage.sh).
+# Essentials only: the app uses QtCore/Gui/Widgets/Svg/Network, not the Addons.
+PySide6-Essentials==6.11.1
+pyinstaller==6.16.0

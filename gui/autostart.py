@@ -2,11 +2,11 @@
 import os
 import shlex
 import shutil
-import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GUI = os.path.join(ROOT, "keyboardrgb_gui.py")
+from gui import runtime
+
 NAME = "keyboardrgb-studio.desktop"
+ICON = "keyboard-studio"
 
 
 def _config_home():
@@ -23,8 +23,7 @@ def launcher_path():
 
 
 def exec_line(tray=False):
-    cmd = [sys.executable, GUI] + (["--tray"] if tray else [])
-    return shlex.join(cmd)
+    return shlex.join(runtime.app_command() + (["--tray"] if tray else []))
 
 
 def _desktop(tray):
@@ -34,13 +33,29 @@ def _desktop(tray):
         "Name=Keyboard Studio",
         "Comment=Preview and run RGB keyboard lighting effects",
         f"Exec={exec_line(tray)}",
-        "Icon=input-keyboard",
+        f"Icon={ICON if _install_icon() else 'input-keyboard'}",
         "Terminal=false",
         "Categories=Utility;Settings;HardwareSettings;",
         "StartupNotify=false",
         "X-GNOME-Autostart-enabled=true" if tray else "",
         "",
     ])
+
+
+def _install_icon():
+    """Copy the app icon into the user's icon theme (a packaged app's own copy
+    lives on a mount that vanishes). Returns False if there is no icon file."""
+    src = runtime.data_path("packaging/keyboard-studio.png")
+    if not os.path.exists(src):
+        return False
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    dest = os.path.join(data, "icons", "hicolor", "256x256", "apps", ICON + ".png")
+    try:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(src, dest)
+    except OSError:
+        return False
+    return True
 
 
 def is_enabled():

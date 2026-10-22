@@ -10,11 +10,11 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QMainW
                                QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget)
 
 from device import PROFILES
-from gui import catalog, hardware, icons, theme
+from gui import catalog, hardware, icons, permissions, theme
 from gui.widgets.controls import (Badge, Banner, Card, Switch, ToastHost, button, label,
                                   refresh_icons)
-from gui.widgets.dialogs import (INPUT_CMD, UDEV_CMD, ExportDialog, NameDialog,
-                                 SettingsDialog, copy_text)
+from gui.widgets.dialogs import (INPUT_CMD, ExportDialog, NameDialog, SettingsDialog,
+                                 copy_text)
 from gui.widgets.keyboard_view import KeyboardView
 from gui.widgets.param_panel import ParamPanel
 from gui.widgets.sidebar import Sidebar
@@ -337,12 +337,14 @@ class MainWindow(QMainWindow):
         set_tip(self.conn, *tips.get(state, ("Keyboard", "")))
         self._refresh_profiles()
         if state == "permission":
-            cmd = UDEV_CMD.format(root=ROOT)
+            cmd = permissions.sudo_command()
             self._banner("device", "warning", "The keyboard is locked",
                          "Your keyboard was found but this app isn't allowed to write to it. "
-                         "Install the udev rule once (needs your password), then replug the "
-                         "keyboard.",
-                         [("Copy command", lambda: self._copy(cmd), "Copy the setup command.")])
+                         "Install keyboard access once (asks for your password).",
+                         [("Install access", self._install_rule,
+                           "Install the udev rule now. Your desktop asks for your password."),
+                          ("Copy command", lambda: self._copy(cmd),
+                           "Copy the command to run it in a terminal yourself.")])
         elif state == "mismatch":
             dev = self.studio.device
             target = dev["profiles"][0] if dev else None
@@ -486,6 +488,18 @@ class MainWindow(QMainWindow):
             s.duplicate_preset(pid)
         elif action == "delete":
             s.delete_preset(pid)
+
+    def _install_rule(self):
+        if not hasattr(self, "_installer"):
+            self._installer = permissions.RuleInstaller(self)
+            self._installer.finished.connect(self._rule_done)
+        self.toast("Waiting for your password…", "info")
+        self._installer.start()
+
+    def _rule_done(self, ok, msg):
+        self.toast(msg, "success" if ok else "warning")
+        if ok:
+            self.studio.rescan()
 
     def export_script(self, title=None, mode=None, values=None):
         title = title or self.studio.mode.label
